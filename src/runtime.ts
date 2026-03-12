@@ -272,16 +272,23 @@ class MaxRuntimeImpl {
         } catch (err) {
           console.error(`[MAX] onMessage dispatch failed:`, err);
         }
-      } else if (this.cfg !== undefined) {
-        try {
-          const { dispatchReplyFromConfig } = await import("openclaw/plugin-sdk");
-          await dispatchReplyFromConfig({ ctx: inboundCtx, cfg: this.cfg, dispatcher });
-          console.log(`[MAX] dispatchReplyFromConfig completed`);
-        } catch (err) {
-          console.error(`[MAX] dispatchReplyFromConfig failed:`, err);
-        }
       } else {
-        console.warn(`[MAX] No delivery mechanism — message lost: ${ctx.text}`);
+        // Discover available dispatch mechanisms
+        try {
+          const sdk = await import("openclaw/plugin-sdk");
+          console.log(`[MAX] openclaw/plugin-sdk exports: ${Object.keys(sdk).join(", ")}`);
+        } catch (err) {
+          console.error(`[MAX] Cannot import openclaw/plugin-sdk:`, err);
+        }
+
+        try {
+          const pluginRuntime = getMaxRuntime();
+          console.log(`[MAX] getMaxRuntime() keys: ${Object.keys(pluginRuntime as any).join(", ")}`);
+        } catch (err) {
+          console.error(`[MAX] getMaxRuntime() failed:`, err);
+        }
+
+        console.warn(`[MAX] No delivery mechanism found — message lost: ${ctx.text}`);
       }
     } catch (error) {
       console.error(`[MAX] handleUpdate() error:`, error);
