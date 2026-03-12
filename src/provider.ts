@@ -10,6 +10,7 @@ import { MaxRuntimeImpl } from "./runtime.js";
 
 export interface MaxProviderConfig {
   account: ResolvedMaxAccount;
+  runtime?: any;
   onMessage?: (message: any) => Promise<void>;
   onError?: (error: Error) => void;
   abortSignal?: AbortSignal;
@@ -28,15 +29,18 @@ export interface MaxProvider {
 export async function monitorMaxProvider(
   config: MaxProviderConfig
 ): Promise<MaxProvider> {
-  const { account, runtime, abortSignal } = config;
+  const { account, runtime, onMessage, onError, abortSignal } = config;
   
   console.log(`[MAX] monitorMaxProvider() starting for account ${account.accountId}`);
   console.log(`[MAX] runtime.onMessage=${!!runtime?.onMessage}, runtime.onError=${!!runtime?.onError}`);
+  console.log(`[MAX] onMessage=${!!onMessage}, onError=${!!onError}`);
   
   // Create runtime
   const runtimeImpl = new MaxRuntimeImpl({
     account,
-    runtime,  // Pass runtime object!
+    runtime,
+    onMessage,
+    onError,
   });
   
   // Start runtime

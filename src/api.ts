@@ -44,7 +44,7 @@ export class MaxApiClient {
     const response = await fetch(url.toString(), {
       method,
       headers: {
-        Authorization: this.token,
+        Authorization: `Bearer ${this.token}`,
         "Content-Type": "application/json",
       },
       body: data ? JSON.stringify(data) : undefined,
@@ -114,7 +114,7 @@ export class MaxApiClient {
     const response = await fetch(`${this.baseUrl}/uploads`, {
       method: "POST",
       headers: {
-        Authorization: this.token,
+        Authorization: `Bearer ${this.token}`,
         ...form.getHeaders(),
       },
       body: form,

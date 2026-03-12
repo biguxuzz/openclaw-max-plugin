@@ -13,7 +13,9 @@ import type { ResolvedMaxAccount, MaxUpdate } from "./types.js";
 
 export interface MaxRuntimeConfig {
   account: ResolvedMaxAccount;
-  runtime?: any;  // Gateway runtime with onMessage, onError
+  runtime?: any;
+  onMessage?: (ctx: any) => Promise<void>;
+  onError?: (err: Error) => void;
 }
 
 export interface MaxMessageContext {
@@ -49,11 +51,12 @@ async function getMaxClient(token: string) {
 class MaxRuntimeImpl {
   private client: any;
   private account: ResolvedMaxAccount;
-  private runtime?: any;  // Gateway runtime with onMessage, onError
+  private runtime?: any;
+  private onMessage?: (ctx: any) => Promise<void>;
+  private onError?: (err: Error) => void;
   private marker?: number;
   private _running: boolean = false;
 
-  // Expose running state for health checks
   public get running(): boolean {
     return this._running;
   }
@@ -61,6 +64,8 @@ class MaxRuntimeImpl {
   constructor(config: MaxRuntimeConfig) {
     this.account = config.account;
     this.runtime = config.runtime;
+    this.onMessage = config.onMessage;
+    this.onError = config.onError;
   }
 
   async start(): Promise<void> {
@@ -90,36 +95,22 @@ class MaxRuntimeImpl {
 
     console.log(`[MAX] Starting runtime for account ${this.account.accountId}`);
 
-    // Get initial marker - start from 0 to get all recent messages
     try {
       console.log(`[MAX] Getting initial marker...`);
       const response = await this.client.getUpdates({ limit: 1, timeout: 1 });
-      // Don't use response.marker, start fresh
-      this.marker = 0;
-      console.log(`[MAX] Starting from marker: 0`);
+      this.marker = response.marker ?? 0;
+      console.log(`[MAX] Starting from marker: ${this.marker}`);
     } catch (error) {
       console.error("[MAX] Failed to get initial marker:", error);
       this.marker = 0;
     }
 
-    // Start polling (fire-and-forget is OK for polling loop)
     console.log(`[MAX] Starting poll loop...`);
     this.pollLoop().catch((err) => {
       console.error("[MAX] Poll loop error:", err);
       this._running = false;
       if (this.onError) {
         this.onError(err);
-      }
-    });
-    
-    console.log(`[MAX] Starting poll loop...`);
-
-    // Start polling in background
-    this.pollLoop().catch((err) => {
-      console.error("[MAX] Poll loop error:", err);
-      this._running = false;
-      if (this.runtime?.onError) {
-        this.runtime.onError(err);
       }
     });
 
@@ -171,10 +162,7 @@ class MaxRuntimeImpl {
         }
       } catch (error) {
         console.error("[MAX] Poll error:", error);
-        if (this.onError) {
-          this.onError(error as Error);
-        }
-        // Wait before retrying
+        this.onError?.(error as Error);
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }
@@ -215,9 +203,6 @@ class MaxRuntimeImpl {
         accountId: this.account.accountId,
       };
 
-      console.log(`[MAX] Trying dispatchReplyFromConfig approach...`);
-
-      // Try dispatchReplyFromConfig instead
       const inboundCtx = {
         channel: "max",
         accountId: this.account.accountId,
@@ -236,29 +221,15 @@ class MaxRuntimeImpl {
 
       console.log(`[MAX] inboundCtx:`, JSON.stringify(inboundCtx, null, 2));
 
-      // Simple dispatcher
-      const dispatcher = {
-        deliver: async (payload) => {
-          console.log(`[MAX] AI Reply:`, payload.text);
-          if (payload.text) {
-            await this.sendMessage(ctx.userId, payload.text);
-          }
-        },
-      };
-
-      // Try to call dispatchReplyFromConfig directly
-      try {
-        const { dispatchReplyFromConfig } = await import("openclaw/plugin-sdk");
-        await dispatchReplyFromConfig({
-          ctx: inboundCtx,
-          cfg: {},
-          dispatcher,
-        });
-        console.log(`[MAX] dispatchReplyFromConfig completed`);
-      } catch (err) {
-        console.error(`[MAX] dispatchReplyFromConfig failed:`, err);
-        // Fallback: just log that we received the message
-        console.log(`[MAX] Message received but cannot dispatch to AI: ${ctx.text}`);
+      if (this.onMessage) {
+        try {
+          await this.onMessage(inboundCtx);
+          console.log(`[MAX] onMessage dispatched successfully`);
+        } catch (err) {
+          console.error(`[MAX] onMessage dispatch failed:`, err);
+        }
+      } else {
+        console.warn(`[MAX] No onMessage handler — message cannot be delivered to gateway: ${ctx.text}`);
       }
     } catch (error) {
       console.error(`[MAX] handleUpdate() error:`, error);
