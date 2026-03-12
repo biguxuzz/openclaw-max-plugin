@@ -196,18 +196,14 @@ class MaxRuntimeImpl {
         return;
       }
 
-      const channelRuntime = (getMaxRuntime() as any)?.channel;
+      const pluginRuntime = getMaxRuntime() as any;
+      const channelRuntime = pluginRuntime?.channel;
 
       const {
-        getAcpRuntimeBackend,
         buildInboundReplyDispatchBase,
         dispatchInboundReplyWithBase,
         recordInboundSessionAndDispatchReply,
       } = await import("openclaw/plugin-sdk") as any;
-
-      // ACP runtime is what dispatch functions actually need (not plugin runtime)
-      const acpRuntime = typeof getAcpRuntimeBackend === "function" ? getAcpRuntimeBackend() : undefined;
-      console.log(`[MAX] acpRuntime keys: ${Object.keys(acpRuntime ?? {}).join(", ")}`);
 
       const dispatcher = {
         deliver: async (payload: any) => {
@@ -220,15 +216,16 @@ class MaxRuntimeImpl {
         reset: () => {},
       };
 
-      // Resolve agent route first
+      // Resolve agent route — provides agentId, sessionKey, etc.
       let route: any;
       if (typeof channelRuntime?.routing?.resolveAgentRoute === "function") {
         route = await channelRuntime.routing.resolveAgentRoute({ ctx: inboundCtx, cfg: this.cfg });
       }
 
+      // Use pluginRuntime (has .channel) + route (has .agentId) together
       if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
         try {
-          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: acpRuntime, route });
+          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, route });
           await dispatchInboundReplyWithBase({ base, dispatcher });
           return;
         } catch (err) {
@@ -238,7 +235,7 @@ class MaxRuntimeImpl {
 
       if (typeof recordInboundSessionAndDispatchReply === "function") {
         try {
-          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: acpRuntime, dispatcher, route });
+          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher, route });
           return;
         } catch (err) {
           console.error(`[MAX] recordInboundSessionAndDispatchReply failed:`, err);
