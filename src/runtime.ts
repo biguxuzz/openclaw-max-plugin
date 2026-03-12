@@ -196,15 +196,18 @@ class MaxRuntimeImpl {
         return;
       }
 
-      const pluginRuntime = getMaxRuntime() as any;
-      const channelRouting = pluginRuntime?.channel?.routing;
+      const channelRuntime = (getMaxRuntime() as any)?.channel;
 
       const {
-        resolveInboundRouteEnvelopeBuilderWithRuntime,
+        getAcpRuntimeBackend,
         buildInboundReplyDispatchBase,
         dispatchInboundReplyWithBase,
         recordInboundSessionAndDispatchReply,
       } = await import("openclaw/plugin-sdk") as any;
+
+      // ACP runtime is what dispatch functions actually need (not plugin runtime)
+      const acpRuntime = typeof getAcpRuntimeBackend === "function" ? getAcpRuntimeBackend() : undefined;
+      console.log(`[MAX] acpRuntime keys: ${Object.keys(acpRuntime ?? {}).join(", ")}`);
 
       const dispatcher = {
         deliver: async (payload: any) => {
@@ -217,44 +220,15 @@ class MaxRuntimeImpl {
         reset: () => {},
       };
 
-      // Step 1: resolve the agent route for this message
+      // Resolve agent route first
       let route: any;
-      if (typeof channelRouting?.resolveAgentRoute === "function") {
-        try {
-          route = await channelRouting.resolveAgentRoute({ ctx: inboundCtx, cfg: this.cfg });
-          console.log(`[MAX] resolveAgentRoute result: ${JSON.stringify(route)}`);
-        } catch (err) {
-          console.error(`[MAX] resolveAgentRoute failed:`, err);
-        }
+      if (typeof channelRuntime?.routing?.resolveAgentRoute === "function") {
+        route = await channelRuntime.routing.resolveAgentRoute({ ctx: inboundCtx, cfg: this.cfg });
       }
 
-      // Step 2: try resolveInboundRouteEnvelopeBuilderWithRuntime
-      if (typeof resolveInboundRouteEnvelopeBuilderWithRuntime === "function") {
-        try {
-          const envelopeBuilder = await resolveInboundRouteEnvelopeBuilderWithRuntime({
-            ctx: inboundCtx,
-            cfg: this.cfg,
-            runtime: pluginRuntime,
-            route,
-          });
-          console.log(`[MAX] envelopeBuilder keys: ${Object.keys(envelopeBuilder ?? {}).join(", ")}`);
-          if (typeof envelopeBuilder?.dispatch === "function") {
-            await envelopeBuilder.dispatch({ dispatcher });
-            return;
-          }
-          if (typeof dispatchInboundReplyWithBase === "function") {
-            await dispatchInboundReplyWithBase({ base: envelopeBuilder, dispatcher });
-            return;
-          }
-        } catch (err) {
-          console.error(`[MAX] resolveInboundRouteEnvelopeBuilderWithRuntime failed:`, err);
-        }
-      }
-
-      // Step 3: try buildInboundReplyDispatchBase with route
       if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
         try {
-          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, route });
+          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: acpRuntime, route });
           await dispatchInboundReplyWithBase({ base, dispatcher });
           return;
         } catch (err) {
@@ -262,10 +236,9 @@ class MaxRuntimeImpl {
         }
       }
 
-      // Step 4: try recordInboundSessionAndDispatchReply with route
       if (typeof recordInboundSessionAndDispatchReply === "function") {
         try {
-          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher, route });
+          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: acpRuntime, dispatcher, route });
           return;
         } catch (err) {
           console.error(`[MAX] recordInboundSessionAndDispatchReply failed:`, err);
