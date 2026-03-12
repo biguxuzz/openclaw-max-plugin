@@ -108,6 +108,25 @@ class MaxRuntimeImpl {
 
     console.log(`[MAX] Starting runtime for account ${this.account.accountId}`);
 
+    // Long polling only works when there are NO active webhook subscriptions.
+    // If webhooks exist, MAX sends events there and ignores polling requests.
+    try {
+      console.log(`[MAX] Checking webhook subscriptions...`);
+      const { subscriptions } = await this.client.getSubscriptions();
+      if (subscriptions && subscriptions.length > 0) {
+        console.log(`[MAX] Found ${subscriptions.length} webhook subscription(s) — deleting to enable long polling:`);
+        for (const sub of subscriptions) {
+          console.log(`[MAX]   DELETE webhook: ${sub.url}`);
+          const result = await this.client.deleteSubscription(sub.url);
+          console.log(`[MAX]   Result: ${JSON.stringify(result)}`);
+        }
+      } else {
+        console.log(`[MAX] No webhook subscriptions found, long polling is available`);
+      }
+    } catch (error) {
+      console.error("[MAX] Failed to check/remove webhook subscriptions:", error);
+    }
+
     try {
       console.log(`[MAX] Getting initial marker...`);
       const response = await this.client.getUpdates({ limit: 1, timeout: 1 });

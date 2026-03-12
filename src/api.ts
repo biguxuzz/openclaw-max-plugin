@@ -66,6 +66,21 @@ export class MaxApiClient {
   }
 
   /**
+   * Get current webhook subscriptions
+   */
+  async getSubscriptions(): Promise<{ subscriptions: Array<{ url: string; time: number }> }> {
+    return this.request("GET", "/subscriptions");
+  }
+
+  /**
+   * Delete a webhook subscription by URL.
+   * When all webhooks are removed, long polling becomes available.
+   */
+  async deleteSubscription(url: string): Promise<{ success: boolean; message?: string }> {
+    return this.request("DELETE", "/subscriptions", { url });
+  }
+
+  /**
    * Send message
    */
   async sendMessage(params: MaxSendMessageParams): Promise<any> {
