@@ -217,12 +217,9 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
    */
   gateway: {
     startAccount: async (ctx) => {
-      const { account, abortSignal, channelRuntime } = ctx;
+      const { account, abortSignal } = ctx;
 
-      console.log(`[MAX] gateway.startAccount() called for ${account.accountId}`);
-      console.log(`[MAX] channelRuntime keys:`, channelRuntime ? Object.keys(channelRuntime) : "null");
-      if (channelRuntime?.text) console.log(`[MAX] channelRuntime.text keys:`, Object.keys(channelRuntime.text));
-      if (channelRuntime?.routing) console.log(`[MAX] channelRuntime.routing keys:`, Object.keys(channelRuntime.routing));
+      console.log(`[MAX] [${account.accountId}] starting`);
 
       const { MaxRuntimeImpl } = await import("./runtime.js");
 
@@ -230,24 +227,20 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
         account,
         cfg: ctx.cfg,
         onError: (err: Error) => {
-          console.error(`[MAX] Runtime error:`, err);
+          console.error(`[MAX] [${account.accountId}] runtime error:`, err);
         },
       });
 
       abortSignal?.addEventListener("abort", () => {
-        console.log(`[MAX] Abort signal received, stopping runtime`);
+        console.log(`[MAX] [${account.accountId}] stopping (abort signal)`);
         runtimeImpl.stop();
       });
 
       await runtimeImpl.start();
 
-      console.log(`[MAX] startAccount() runtime started, waiting for completion...`);
-
       // Block until poll loop exits (via abortSignal or fatal error).
       // This is required: the gateway treats a resolved startAccount as "stopped".
       await runtimeImpl.done;
-
-      console.log(`[MAX] startAccount() completed`);
     },
 
     logoutAccount: async ({ accountId, cfg }) => {

@@ -82,79 +82,50 @@ class MaxRuntimeImpl {
   }
 
   async start(): Promise<void> {
-    console.log(`[MAX] start() called for account ${this.account.accountId}`);
-    
-    if (this.running) {
-      console.log(`[MAX] Already running, skipping start()`);
-      return;
-    }
+    if (this.running) return;
 
     if (!this.account.token) {
-      const error = "MAX account token not configured";
-      console.error(`[MAX] ${error}`);
-      throw new Error(error);
+      throw new Error("MAX account token not configured");
     }
 
-    console.log(`[MAX] Creating MAX client...`);
-    try {
-      this.client = await getMaxClient(this.account.token);
-      console.log(`[MAX] MAX client created successfully`);
-    } catch (err) {
-      console.error(`[MAX] Failed to create MAX client:`, err);
-      throw err;
-    }
-    
+    this.client = await getMaxClient(this.account.token);
     this._running = true;
-
-    console.log(`[MAX] Starting runtime for account ${this.account.accountId}`);
 
     // Long polling only works when there are NO active webhook subscriptions.
     // If webhooks exist, MAX sends events there and ignores polling requests.
     try {
-      console.log(`[MAX] Checking webhook subscriptions...`);
       const { subscriptions } = await this.client.getSubscriptions();
       if (subscriptions && subscriptions.length > 0) {
-        console.log(`[MAX] Found ${subscriptions.length} webhook subscription(s) — deleting to enable long polling:`);
+        console.log(`[MAX] Removing ${subscriptions.length} webhook subscription(s) to enable long polling`);
         for (const sub of subscriptions) {
-          console.log(`[MAX]   DELETE webhook: ${sub.url}`);
-          const result = await this.client.deleteSubscription(sub.url);
-          console.log(`[MAX]   Result: ${JSON.stringify(result)}`);
+          await this.client.deleteSubscription(sub.url);
         }
-      } else {
-        console.log(`[MAX] No webhook subscriptions found, long polling is available`);
       }
     } catch (error) {
       console.error("[MAX] Failed to check/remove webhook subscriptions:", error);
     }
 
     try {
-      console.log(`[MAX] Getting initial marker...`);
       const response = await this.client.getUpdates({ limit: 1, timeout: 1 });
       this.marker = response.marker ?? 0;
-      console.log(`[MAX] Starting from marker: ${this.marker}`);
+      console.log(`[MAX] Poll starting from marker: ${this.marker}`);
     } catch (error) {
       console.error("[MAX] Failed to get initial marker:", error);
       this.marker = 0;
     }
 
-    console.log(`[MAX] Starting poll loop...`);
     this.pollLoop()
-      .then(() => {
-        this._doneResolve?.();
-      })
+      .then(() => this._doneResolve?.())
       .catch((err) => {
-        console.error("[MAX] Poll loop error:", err);
+        console.error("[MAX] Poll loop fatal error:", err);
         this._running = false;
         this.onError?.(err);
         this._doneReject?.(err);
       });
-
-    console.log(`[MAX] start() completed successfully`);
   }
 
   stop(): void {
     this._running = false;
-    console.log(`[MAX] Stopped runtime`);
   }
 
   async sendMessage(userId: number, text: string): Promise<void> {
@@ -169,27 +140,21 @@ class MaxRuntimeImpl {
   }
 
   private async pollLoop(): Promise<void> {
-    console.log(`[MAX] pollLoop() started`);
     while (this.running) {
       try {
-        const pollParams = { limit: 100, timeout: 30, marker: this.marker };
-        console.log(`[MAX] Polling for updates... params=${JSON.stringify(pollParams)}`);
-        const response = await this.client.getUpdates(pollParams);
+        const response = await this.client.getUpdates({
+          limit: 100,
+          timeout: 30,
+          marker: this.marker,
+        });
 
-        const responseKeys = Object.keys(response);
-        const updates = response.updates || [];
-        console.log(`[MAX] Response keys: [${responseKeys.join(", ")}], updates: ${updates.length}, marker: ${response.marker}`);
-
-        if (updates.length > 0) {
-          console.log(`[MAX] Raw updates:`, JSON.stringify(updates, null, 2));
-          for (const update of updates) {
-            await this.handleUpdate(update);
-          }
+        const updates: MaxUpdate[] = response.updates || [];
+        for (const update of updates) {
+          await this.handleUpdate(update);
         }
 
         if (response.marker != null) {
           this.marker = response.marker;
-          console.log(`[MAX] Updated marker to: ${this.marker}`);
         }
       } catch (error) {
         console.error("[MAX] Poll error:", error);
@@ -197,101 +162,75 @@ class MaxRuntimeImpl {
         await new Promise(resolve => setTimeout(resolve, 5000));
       }
     }
-    console.log(`[MAX] pollLoop() exited (running=${this.running})`);
   }
 
   private async handleUpdate(update: MaxUpdate): Promise<void> {
-    console.log(`[MAX] handleUpdate() called: ${JSON.stringify(update.update_type)}`);
-    
     try {
-      if (update.update_type !== "message_created" || !update.message) {
-        console.log(`[MAX] Skipping update: not message_created or no message`);
-        return;
-      }
+      if (update.update_type !== "message_created" || !update.message) return;
 
       const message = update.message;
-
-      // Skip bot messages
-      if (message.sender?.is_bot) {
-        console.log(`[MAX] Skipping bot message`);
-        return;
-      }
+      if (message.sender?.is_bot) return;
 
       const text = message.body?.text;
-      if (!text) {
-        console.log(`[MAX] Skipping message: no text`);
-        return;
-      }
+      if (!text) return;
 
       const firstName = message.sender?.first_name || "";
       const lastName = message.sender?.last_name || "";
       const displayName = [firstName, lastName].filter(Boolean).join(" ") || "Unknown";
+      const userId = message.sender?.user_id || 0;
 
-      console.log(`[MAX] Processing message from ${displayName}: "${text}"`);
-
-      const ctx: MaxMessageContext = {
-        messageId: message.body?.mid || "unknown",
-        userId: message.sender?.user_id || 0,
-        userName: displayName,
-        text: text,
-        timestamp: message.timestamp || Date.now(),
-        accountId: this.account.accountId,
-      };
+      console.log(`[MAX] message from ${displayName} (${userId}): "${text}"`);
 
       const inboundCtx = {
         channel: "max",
         accountId: this.account.accountId,
-        peer: {
-          kind: "direct",
-          id: ctx.userId.toString(),
-        },
-        sender: {
-          id: ctx.userId.toString(),
-          name: ctx.userName,
-        },
-        text: ctx.text,
-        timestamp: ctx.timestamp,
-        messageId: ctx.messageId,
+        peer: { kind: "direct", id: userId.toString() },
+        sender: { id: userId.toString(), name: displayName },
+        text,
+        timestamp: message.timestamp || Date.now(),
+        messageId: message.body?.mid || "unknown",
       };
-
-      console.log(`[MAX] inboundCtx:`, JSON.stringify(inboundCtx, null, 2));
 
       const dispatcher = {
         deliver: async (payload: any) => {
-          console.log(`[MAX] AI reply:`, payload?.text);
           if (payload?.text) {
-            await this.sendMessage(ctx.userId, payload.text);
+            await this.sendMessage(userId, payload.text);
           }
         },
       };
 
       if (this.onMessage) {
-        try {
-          await this.onMessage(inboundCtx);
-          console.log(`[MAX] onMessage dispatched successfully`);
-        } catch (err) {
-          console.error(`[MAX] onMessage dispatch failed:`, err);
-        }
-      } else {
-        // Discover available dispatch mechanisms
-        try {
-          const sdk = await import("openclaw/plugin-sdk");
-          console.log(`[MAX] openclaw/plugin-sdk exports: ${Object.keys(sdk).join(", ")}`);
-        } catch (err) {
-          console.error(`[MAX] Cannot import openclaw/plugin-sdk:`, err);
-        }
-
-        try {
-          const pluginRuntime = getMaxRuntime();
-          console.log(`[MAX] getMaxRuntime() keys: ${Object.keys(pluginRuntime as any).join(", ")}`);
-        } catch (err) {
-          console.error(`[MAX] getMaxRuntime() failed:`, err);
-        }
-
-        console.warn(`[MAX] No delivery mechanism found — message lost: ${ctx.text}`);
+        await this.onMessage(inboundCtx);
+        return;
       }
+
+      const pluginRuntime = getMaxRuntime() as any;
+      const {
+        dispatchReplyFromConfigWithSettledDispatcher,
+        buildInboundReplyDispatchBase,
+        dispatchInboundReplyWithBase,
+        recordInboundSessionAndDispatchReply,
+      } = await import("openclaw/plugin-sdk") as any;
+
+      if (typeof dispatchReplyFromConfigWithSettledDispatcher === "function") {
+        await dispatchReplyFromConfigWithSettledDispatcher({ ctx: inboundCtx, cfg: this.cfg, dispatcher });
+        return;
+      }
+
+      if (typeof recordInboundSessionAndDispatchReply === "function") {
+        await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher });
+        return;
+      }
+
+      if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
+        const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime });
+        await dispatchInboundReplyWithBase({ base, dispatcher });
+        return;
+      }
+
+      console.warn(`[MAX] No dispatch mechanism available — message lost: "${text}"`);
     } catch (error) {
-      console.error(`[MAX] handleUpdate() error:`, error);
+      console.error(`[MAX] handleUpdate error:`, error);
     }
   }
 
