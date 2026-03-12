@@ -72,11 +72,11 @@ export class MaxApiClient {
     const query: any = {};
     if (params.user_id) query.user_id = params.user_id;
     if (params.chat_id) query.chat_id = params.chat_id;
-    if (params.notify !== undefined) query.notify = params.notify;
 
     const body: any = { text: params.text };
     if (params.format) body.format = params.format;
     if (params.attachments) body.attachments = params.attachments;
+    if (params.notify !== undefined) body.notify = params.notify;
 
     return this.request("POST", "/messages", query, body);
   }
@@ -94,7 +94,7 @@ export class MaxApiClient {
       types: "message_created",  // Request message updates
     };
 
-    if (params.marker) query.marker = params.marker;
+    if (params.marker !== undefined && params.marker !== null) query.marker = params.marker;
     if (params.types) query.types = params.types.join(",");
 
     return this.request("GET", "/updates", query);

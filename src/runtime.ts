@@ -150,13 +150,11 @@ class MaxRuntimeImpl {
         if (updates.length > 0) {
           console.log(`[MAX] Processing ${updates.length} updates...`);
           for (const update of updates) {
-            console.log(`[MAX] Update marker: ${update.marker}, response marker: ${response.marker}`);
             await this.handleUpdate(update);
           }
         }
 
-        // Always update marker from response
-        if (response.marker) {
+        if (response.marker != null) {
           this.marker = response.marker;
           console.log(`[MAX] Updated marker to: ${this.marker}`);
         }
@@ -192,12 +190,16 @@ class MaxRuntimeImpl {
         return;
       }
 
-      console.log(`[MAX] Processing message from ${message.sender?.name}: "${text}"`);
+      const firstName = message.sender?.first_name || "";
+      const lastName = message.sender?.last_name || "";
+      const displayName = [firstName, lastName].filter(Boolean).join(" ") || "Unknown";
+
+      console.log(`[MAX] Processing message from ${displayName}: "${text}"`);
 
       const ctx: MaxMessageContext = {
         messageId: message.body?.mid || "unknown",
         userId: message.sender?.user_id || 0,
-        userName: message.sender?.name || "Unknown",
+        userName: displayName,
         text: text,
         timestamp: message.timestamp || Date.now(),
         accountId: this.account.accountId,

@@ -31,7 +31,7 @@ export interface ResolvedMaxAccount {
 export interface MaxProbe {
   botInfo?: {
     user_id: number;
-    name: string;
+    first_name: string;
     username: string;
   };
   connected: boolean;
@@ -39,24 +39,30 @@ export interface MaxProbe {
 }
 
 export interface MaxMessage {
-  message_id: string;
-  sender: {
+  sender?: {
     user_id: number;
-    name: string;
+    first_name: string;
+    last_name?: string;
     username?: string;
     is_bot: boolean;
   };
+  recipient: {
+    chat_id?: number;
+    user_id?: number;
+    chat_type?: string;
+  };
   body: {
     mid: string;
-    text: string;
+    text?: string;
   };
   timestamp: number;
 }
 
 export interface MaxUpdate {
   update_type: string;
-  marker: number;
+  timestamp: number;
   message?: MaxMessage;
+  user_locale?: string;
   callback?: any;
 }
 
