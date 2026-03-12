@@ -197,9 +197,10 @@ class MaxRuntimeImpl {
       }
 
       const pluginRuntime = getMaxRuntime() as any;
-      console.log(`[MAX] runtime.channel keys: ${Object.keys(pluginRuntime?.channel ?? {}).join(", ")}`);
+      const channelRouting = pluginRuntime?.channel?.routing;
 
       const {
+        resolveInboundRouteEnvelopeBuilderWithRuntime,
         buildInboundReplyDispatchBase,
         dispatchInboundReplyWithBase,
         recordInboundSessionAndDispatchReply,
@@ -216,13 +217,44 @@ class MaxRuntimeImpl {
         reset: () => {},
       };
 
-      // dispatchReplyFromConfigWithSettledDispatcher fails for custom channels
-      // because it tries to look up channel.Surface in the built-in registry.
-      // Use lower-level functions instead.
+      // Step 1: resolve the agent route for this message
+      let route: any;
+      if (typeof channelRouting?.resolveAgentRoute === "function") {
+        try {
+          route = await channelRouting.resolveAgentRoute({ ctx: inboundCtx, cfg: this.cfg });
+          console.log(`[MAX] resolveAgentRoute result: ${JSON.stringify(route)}`);
+        } catch (err) {
+          console.error(`[MAX] resolveAgentRoute failed:`, err);
+        }
+      }
 
+      // Step 2: try resolveInboundRouteEnvelopeBuilderWithRuntime
+      if (typeof resolveInboundRouteEnvelopeBuilderWithRuntime === "function") {
+        try {
+          const envelopeBuilder = await resolveInboundRouteEnvelopeBuilderWithRuntime({
+            ctx: inboundCtx,
+            cfg: this.cfg,
+            runtime: pluginRuntime,
+            route,
+          });
+          console.log(`[MAX] envelopeBuilder keys: ${Object.keys(envelopeBuilder ?? {}).join(", ")}`);
+          if (typeof envelopeBuilder?.dispatch === "function") {
+            await envelopeBuilder.dispatch({ dispatcher });
+            return;
+          }
+          if (typeof dispatchInboundReplyWithBase === "function") {
+            await dispatchInboundReplyWithBase({ base: envelopeBuilder, dispatcher });
+            return;
+          }
+        } catch (err) {
+          console.error(`[MAX] resolveInboundRouteEnvelopeBuilderWithRuntime failed:`, err);
+        }
+      }
+
+      // Step 3: try buildInboundReplyDispatchBase with route
       if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
         try {
-          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime });
+          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, route });
           await dispatchInboundReplyWithBase({ base, dispatcher });
           return;
         } catch (err) {
@@ -230,9 +262,10 @@ class MaxRuntimeImpl {
         }
       }
 
+      // Step 4: try recordInboundSessionAndDispatchReply with route
       if (typeof recordInboundSessionAndDispatchReply === "function") {
         try {
-          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher });
+          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher, route });
           return;
         } catch (err) {
           console.error(`[MAX] recordInboundSessionAndDispatchReply failed:`, err);
