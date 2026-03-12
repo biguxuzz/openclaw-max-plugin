@@ -57,6 +57,12 @@ class MaxRuntimeImpl {
   private marker?: number;
   private _running: boolean = false;
 
+  private _doneResolve?: () => void;
+  private _doneReject?: (err: Error) => void;
+
+  /** Resolves when the poll loop exits cleanly, rejects on fatal error. */
+  public readonly done: Promise<void>;
+
   public get running(): boolean {
     return this._running;
   }
@@ -66,6 +72,10 @@ class MaxRuntimeImpl {
     this.runtime = config.runtime;
     this.onMessage = config.onMessage;
     this.onError = config.onError;
+    this.done = new Promise<void>((resolve, reject) => {
+      this._doneResolve = resolve;
+      this._doneReject = reject;
+    });
   }
 
   async start(): Promise<void> {
@@ -106,13 +116,16 @@ class MaxRuntimeImpl {
     }
 
     console.log(`[MAX] Starting poll loop...`);
-    this.pollLoop().catch((err) => {
-      console.error("[MAX] Poll loop error:", err);
-      this._running = false;
-      if (this.onError) {
-        this.onError(err);
-      }
-    });
+    this.pollLoop()
+      .then(() => {
+        this._doneResolve?.();
+      })
+      .catch((err) => {
+        console.error("[MAX] Poll loop error:", err);
+        this._running = false;
+        this.onError?.(err);
+        this._doneReject?.(err);
+      });
 
     console.log(`[MAX] start() completed successfully`);
   }

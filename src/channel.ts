@@ -217,35 +217,40 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
    */
   gateway: {
     startAccount: async (ctx) => {
-      const { account, runtime, abortSignal, ...rest } = ctx;
-      
-      console.log(`[MAX] gateway.startAccount() called for ${account.accountId}`);
-      console.log(`[MAX] ctx keys:`, Object.keys(ctx));
-      console.log(`[MAX] ctx full:`, JSON.stringify({
-        hasRuntime: !!runtime,
-        runtimeKeys: runtime ? Object.keys(runtime) : [],
-        hasOnMessage: !!ctx.onMessage,
-        hasOnError: !!ctx.onError,
-        restKeys: Object.keys(rest)
-      }));
-      
-      const { monitorMaxProvider } = await import("./provider.js");
+      const { account, abortSignal, channelRuntime } = ctx;
 
-      const provider = await monitorMaxProvider({
+      console.log(`[MAX] gateway.startAccount() called for ${account.accountId}`);
+      console.log(`[MAX] channelRuntime keys:`, channelRuntime ? Object.keys(channelRuntime) : "null");
+
+      const { MaxRuntimeImpl } = await import("./runtime.js");
+
+      const runtimeImpl = new MaxRuntimeImpl({
         account,
-        runtime,
-        abortSignal,
-        onMessage: ctx.onMessage,
-        onError: ctx.onError,
+        onMessage: channelRuntime?.onMessage
+          ? (msgCtx: any) => channelRuntime.onMessage(msgCtx)
+          : undefined,
+        onError: (err: Error) => {
+          console.error(`[MAX] Runtime error:`, err);
+        },
       });
 
-      console.log(`[MAX] gateway.startAccount() provider created, running=${provider.running}`);
-      
-      return provider;
+      abortSignal?.addEventListener("abort", () => {
+        console.log(`[MAX] Abort signal received, stopping runtime`);
+        runtimeImpl.stop();
+      });
+
+      await runtimeImpl.start();
+
+      console.log(`[MAX] startAccount() runtime started, waiting for completion...`);
+
+      // Block until poll loop exits (via abortSignal or fatal error).
+      // This is required: the gateway treats a resolved startAccount as "stopped".
+      await runtimeImpl.done;
+
+      console.log(`[MAX] startAccount() completed`);
     },
 
     logoutAccount: async ({ accountId, cfg }) => {
-      // MAX doesn't require logout, just return config unchanged
       return cfg;
     },
   },
