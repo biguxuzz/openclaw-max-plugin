@@ -197,6 +197,7 @@ class MaxRuntimeImpl {
             await this.sendMessage(userId, payload.text);
           }
         },
+        markComplete: () => {},
       };
 
       if (this.onMessage) {
