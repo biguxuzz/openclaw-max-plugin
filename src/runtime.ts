@@ -191,41 +191,41 @@ class MaxRuntimeImpl {
         messageId: message.body?.mid || "unknown",
       };
 
-      const dispatcher = {
-        deliver: async (payload: any) => {
-          if (payload?.text) {
-            await this.sendMessage(userId, payload.text);
-          }
-        },
-        markComplete: () => {},
-      };
-
       if (this.onMessage) {
         await this.onMessage(inboundCtx);
         return;
       }
 
       const pluginRuntime = getMaxRuntime() as any;
+      const sdk = await import("openclaw/plugin-sdk") as any;
       const {
         dispatchReplyFromConfigWithSettledDispatcher,
-        buildInboundReplyDispatchBase,
-        dispatchInboundReplyWithBase,
-        recordInboundSessionAndDispatchReply,
-      } = await import("openclaw/plugin-sdk") as any;
+        createNormalizedOutboundDeliverer,
+      } = sdk;
+
+      // Build the outbound deliverer using the SDK factory if available,
+      // otherwise fall back to a minimal stub.
+      let dispatcher: any;
+      if (typeof createNormalizedOutboundDeliverer === "function") {
+        dispatcher = createNormalizedOutboundDeliverer({
+          send: async (payload: any) => {
+            if (payload?.text) await this.sendMessage(userId, payload.text);
+          },
+        });
+      } else {
+        dispatcher = {
+          deliver: async (payload: any) => {
+            if (payload?.text) await this.sendMessage(userId, payload.text);
+          },
+          markComplete: () => {},
+          waitForIdle: async () => {},
+          flush: async () => {},
+          abort: () => {},
+        };
+      }
 
       if (typeof dispatchReplyFromConfigWithSettledDispatcher === "function") {
         await dispatchReplyFromConfigWithSettledDispatcher({ ctx: inboundCtx, cfg: this.cfg, dispatcher });
-        return;
-      }
-
-      if (typeof recordInboundSessionAndDispatchReply === "function") {
-        await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher });
-        return;
-      }
-
-      if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
-        const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime });
-        await dispatchInboundReplyWithBase({ base, dispatcher });
         return;
       }
 
