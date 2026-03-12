@@ -197,7 +197,13 @@ class MaxRuntimeImpl {
       }
 
       const pluginRuntime = getMaxRuntime() as any;
-      const { dispatchReplyFromConfigWithSettledDispatcher } = await import("openclaw/plugin-sdk") as any;
+      console.log(`[MAX] runtime.channel keys: ${Object.keys(pluginRuntime?.channel ?? {}).join(", ")}`);
+
+      const {
+        buildInboundReplyDispatchBase,
+        dispatchInboundReplyWithBase,
+        recordInboundSessionAndDispatchReply,
+      } = await import("openclaw/plugin-sdk") as any;
 
       const dispatcher = {
         deliver: async (payload: any) => {
@@ -210,9 +216,27 @@ class MaxRuntimeImpl {
         reset: () => {},
       };
 
-      if (typeof dispatchReplyFromConfigWithSettledDispatcher === "function") {
-        await dispatchReplyFromConfigWithSettledDispatcher({ ctx: inboundCtx, cfg: this.cfg, dispatcher });
-        return;
+      // dispatchReplyFromConfigWithSettledDispatcher fails for custom channels
+      // because it tries to look up channel.Surface in the built-in registry.
+      // Use lower-level functions instead.
+
+      if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
+        try {
+          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime });
+          await dispatchInboundReplyWithBase({ base, dispatcher });
+          return;
+        } catch (err) {
+          console.error(`[MAX] buildInboundReplyDispatchBase failed:`, err);
+        }
+      }
+
+      if (typeof recordInboundSessionAndDispatchReply === "function") {
+        try {
+          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher });
+          return;
+        } catch (err) {
+          console.error(`[MAX] recordInboundSessionAndDispatchReply failed:`, err);
+        }
       }
 
       console.warn(`[MAX] No dispatch mechanism available — message lost: "${text}"`);
