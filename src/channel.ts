@@ -221,14 +221,23 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
 
       console.log(`[MAX] gateway.startAccount() called for ${account.accountId}`);
       console.log(`[MAX] channelRuntime keys:`, channelRuntime ? Object.keys(channelRuntime) : "null");
+      if (channelRuntime?.text) console.log(`[MAX] channelRuntime.text keys:`, Object.keys(channelRuntime.text));
+      if (channelRuntime?.routing) console.log(`[MAX] channelRuntime.routing keys:`, Object.keys(channelRuntime.routing));
 
       const { MaxRuntimeImpl } = await import("./runtime.js");
 
+      const onMessageFn = channelRuntime?.routing?.onMessage
+        ?? channelRuntime?.routing?.receive
+        ?? channelRuntime?.text?.onMessage
+        ?? channelRuntime?.text?.receive
+        ?? channelRuntime?.onMessage
+        ?? undefined;
+
+      console.log(`[MAX] onMessage handler found: ${!!onMessageFn}`);
+
       const runtimeImpl = new MaxRuntimeImpl({
         account,
-        onMessage: channelRuntime?.onMessage
-          ? (msgCtx: any) => channelRuntime.onMessage(msgCtx)
-          : undefined,
+        onMessage: onMessageFn ? (msgCtx: any) => onMessageFn(msgCtx) : undefined,
         onError: (err: Error) => {
           console.error(`[MAX] Runtime error:`, err);
         },

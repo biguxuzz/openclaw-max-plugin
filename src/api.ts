@@ -91,11 +91,10 @@ export class MaxApiClient {
     const query: any = {
       limit: params.limit || 100,
       timeout: params.timeout || 30,
-      types: "message_created",  // Request message updates
     };
 
     if (params.marker !== undefined && params.marker !== null) query.marker = params.marker;
-    if (params.types) query.types = params.types.join(",");
+    if (params.types && params.types.length > 0) query.types = params.types.join(",");
 
     return this.request("GET", "/updates", query);
   }

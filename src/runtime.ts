@@ -158,10 +158,10 @@ class MaxRuntimeImpl {
         });
 
         const updates = response.updates || [];
-        console.log(`[MAX] Received ${updates.length} updates`);
+        console.log(`[MAX] Received ${updates.length} updates (raw marker: ${response.marker})`);
 
         if (updates.length > 0) {
-          console.log(`[MAX] Processing ${updates.length} updates...`);
+          console.log(`[MAX] Raw updates:`, JSON.stringify(updates, null, 2));
           for (const update of updates) {
             await this.handleUpdate(update);
           }
