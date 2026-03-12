@@ -197,32 +197,18 @@ class MaxRuntimeImpl {
       }
 
       const pluginRuntime = getMaxRuntime() as any;
-      const sdk = await import("openclaw/plugin-sdk") as any;
-      const {
-        dispatchReplyFromConfigWithSettledDispatcher,
-        createNormalizedOutboundDeliverer,
-      } = sdk;
+      const { dispatchReplyFromConfigWithSettledDispatcher } = await import("openclaw/plugin-sdk") as any;
 
-      // Build the outbound deliverer using the SDK factory if available,
-      // otherwise fall back to a minimal stub.
-      let dispatcher: any;
-      if (typeof createNormalizedOutboundDeliverer === "function") {
-        dispatcher = createNormalizedOutboundDeliverer({
-          send: async (payload: any) => {
-            if (payload?.text) await this.sendMessage(userId, payload.text);
-          },
-        });
-      } else {
-        dispatcher = {
-          deliver: async (payload: any) => {
-            if (payload?.text) await this.sendMessage(userId, payload.text);
-          },
-          markComplete: () => {},
-          waitForIdle: async () => {},
-          flush: async () => {},
-          abort: () => {},
-        };
-      }
+      const dispatcher = {
+        deliver: async (payload: any) => {
+          if (payload?.text) await this.sendMessage(userId, payload.text);
+        },
+        markComplete: () => {},
+        waitForIdle: async () => {},
+        flush: async () => {},
+        abort: () => {},
+        reset: () => {},
+      };
 
       if (typeof dispatchReplyFromConfigWithSettledDispatcher === "function") {
         await dispatchReplyFromConfigWithSettledDispatcher({ ctx: inboundCtx, cfg: this.cfg, dispatcher });
