@@ -226,18 +226,9 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
 
       const { MaxRuntimeImpl } = await import("./runtime.js");
 
-      const onMessageFn = channelRuntime?.routing?.onMessage
-        ?? channelRuntime?.routing?.receive
-        ?? channelRuntime?.text?.onMessage
-        ?? channelRuntime?.text?.receive
-        ?? channelRuntime?.onMessage
-        ?? undefined;
-
-      console.log(`[MAX] onMessage handler found: ${!!onMessageFn}`);
-
       const runtimeImpl = new MaxRuntimeImpl({
         account,
-        onMessage: onMessageFn ? (msgCtx: any) => onMessageFn(msgCtx) : undefined,
+        cfg: ctx.cfg,
         onError: (err: Error) => {
           console.error(`[MAX] Runtime error:`, err);
         },

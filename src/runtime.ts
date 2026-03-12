@@ -14,6 +14,7 @@ import type { ResolvedMaxAccount, MaxUpdate } from "./types.js";
 export interface MaxRuntimeConfig {
   account: ResolvedMaxAccount;
   runtime?: any;
+  cfg?: any;
   onMessage?: (ctx: any) => Promise<void>;
   onError?: (err: Error) => void;
 }
@@ -52,6 +53,7 @@ class MaxRuntimeImpl {
   private client: any;
   private account: ResolvedMaxAccount;
   private runtime?: any;
+  private cfg?: any;
   private onMessage?: (ctx: any) => Promise<void>;
   private onError?: (err: Error) => void;
   private marker?: number;
@@ -70,6 +72,7 @@ class MaxRuntimeImpl {
   constructor(config: MaxRuntimeConfig) {
     this.account = config.account;
     this.runtime = config.runtime;
+    this.cfg = config.cfg;
     this.onMessage = config.onMessage;
     this.onError = config.onError;
     this.done = new Promise<void>((resolve, reject) => {
@@ -150,15 +153,13 @@ class MaxRuntimeImpl {
     console.log(`[MAX] pollLoop() started`);
     while (this.running) {
       try {
-        console.log(`[MAX] Polling for updates... (marker: ${this.marker})`);
-        const response = await this.client.getUpdates({
-          limit: 100,
-          timeout: 30,
-          marker: this.marker,
-        });
+        const pollParams = { limit: 100, timeout: 30, marker: this.marker };
+        console.log(`[MAX] Polling for updates... params=${JSON.stringify(pollParams)}`);
+        const response = await this.client.getUpdates(pollParams);
 
+        const responseKeys = Object.keys(response);
         const updates = response.updates || [];
-        console.log(`[MAX] Received ${updates.length} updates (raw marker: ${response.marker})`);
+        console.log(`[MAX] Response keys: [${responseKeys.join(", ")}], updates: ${updates.length}, marker: ${response.marker}`);
 
         if (updates.length > 0) {
           console.log(`[MAX] Raw updates:`, JSON.stringify(updates, null, 2));
@@ -236,6 +237,15 @@ class MaxRuntimeImpl {
 
       console.log(`[MAX] inboundCtx:`, JSON.stringify(inboundCtx, null, 2));
 
+      const dispatcher = {
+        deliver: async (payload: any) => {
+          console.log(`[MAX] AI reply:`, payload?.text);
+          if (payload?.text) {
+            await this.sendMessage(ctx.userId, payload.text);
+          }
+        },
+      };
+
       if (this.onMessage) {
         try {
           await this.onMessage(inboundCtx);
@@ -243,8 +253,16 @@ class MaxRuntimeImpl {
         } catch (err) {
           console.error(`[MAX] onMessage dispatch failed:`, err);
         }
+      } else if (this.cfg !== undefined) {
+        try {
+          const { dispatchReplyFromConfig } = await import("openclaw/plugin-sdk");
+          await dispatchReplyFromConfig({ ctx: inboundCtx, cfg: this.cfg, dispatcher });
+          console.log(`[MAX] dispatchReplyFromConfig completed`);
+        } catch (err) {
+          console.error(`[MAX] dispatchReplyFromConfig failed:`, err);
+        }
       } else {
-        console.warn(`[MAX] No onMessage handler — message cannot be delivered to gateway: ${ctx.text}`);
+        console.warn(`[MAX] No delivery mechanism — message lost: ${ctx.text}`);
       }
     } catch (error) {
       console.error(`[MAX] handleUpdate() error:`, error);
