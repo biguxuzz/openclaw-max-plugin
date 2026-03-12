@@ -55,7 +55,7 @@ OpenClaw автоматически загружает плагины из `~/.o
        "max": {
          "accounts": {
            "default": {
-             "token": "f9LHodD0cOLC3UVBC9exUidpAOCSoj60vqSvXwp7Q2cjo9P9im_foKwFoY_u9wUkQytOgfzKYLirec2qHz0E",
+             "token": "YOUR_MAX_BOT_TOKEN",
              "enabled": true,
              "dmPolicy": "pairing"
            }
