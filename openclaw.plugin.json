@@ -1,0 +1,30 @@
+{
+  "id": "max",
+  "channels": ["max"],
+  "label": "MAX Messenger",
+  "version": "1.0.0",
+  "description": "MAX messenger channel plugin",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "token": {
+        "type": "string"
+      },
+      "dmPolicy": {
+        "type": "string",
+        "enum": ["open", "pairing", "closed"],
+        "default": "pairing"
+      },
+      "allowFrom": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
