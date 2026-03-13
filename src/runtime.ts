@@ -206,14 +206,15 @@ class MaxRuntimeImpl {
       }
 
       // Build FinalizedMsgContext (uppercase keys as per OpenClaw internal format)
+      const maxTo = `max:${userId}`;
       const ctxPayload = {
         Body: text,
         BodyForAgent: text,
         RawBody: text,
         CommandBody: text,
         BodyForCommands: text,
-        From: `max:${userId}`,
-        To: `max:${userId}`,
+        From: maxTo,
+        To: maxTo,
         SessionKey: route?.sessionKey,
         AccountId: route?.accountId ?? this.account.accountId,
         ChatType: "direct",
@@ -225,9 +226,32 @@ class MaxRuntimeImpl {
         MessageSid: message.body?.mid || undefined,
         Timestamp: message.timestamp || Date.now(),
         CommandAuthorized: false,
+        // Force reply routing back via MAX, not via session's lastChannel (e.g. telegram)
         OriginatingChannel: "max",
-        OriginatingTo: `max:${userId}`,
+        OriginatingTo: maxTo,
+        ExplicitDeliverRoute: true,
       };
+
+      // Update session last route so AI knows to use MAX for future replies
+      if (typeof channelRuntime?.session?.recordInboundSession === "function" && route) {
+        try {
+          await channelRuntime.session.recordInboundSession({
+            sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+            ctx: ctxPayload,
+            updateLastRoute: {
+              sessionKey: route.mainSessionKey ?? route.sessionKey,
+              channel: "max",
+              to: maxTo,
+              accountId: this.account.accountId,
+            },
+            onRecordError: (err: unknown) => {
+              console.error("[MAX] recordInboundSession error:", err);
+            },
+          });
+        } catch (err) {
+          console.error("[MAX] recordInboundSession failed:", err);
+        }
+      }
 
       if (typeof channelRuntime?.reply?.dispatchReplyWithBufferedBlockDispatcher === "function") {
         await channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
