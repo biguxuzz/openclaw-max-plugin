@@ -13,7 +13,7 @@ import type { ResolvedMaxAccount, MaxUpdate } from "./types.js";
 
 export interface MaxRuntimeConfig {
   account: ResolvedMaxAccount;
-  runtime?: any;
+  channelRuntime?: any;
   cfg?: any;
   onMessage?: (ctx: any) => Promise<void>;
   onError?: (err: Error) => void;
@@ -52,7 +52,7 @@ async function getMaxClient(token: string) {
 class MaxRuntimeImpl {
   private client: any;
   private account: ResolvedMaxAccount;
-  private runtime?: any;
+  private channelRuntime?: any;
   private cfg?: any;
   private onMessage?: (ctx: any) => Promise<void>;
   private onError?: (err: Error) => void;
@@ -71,7 +71,7 @@ class MaxRuntimeImpl {
 
   constructor(config: MaxRuntimeConfig) {
     this.account = config.account;
-    this.runtime = config.runtime;
+    this.channelRuntime = config.channelRuntime;
     this.cfg = config.cfg;
     this.onMessage = config.onMessage;
     this.onError = config.onError;
@@ -196,53 +196,57 @@ class MaxRuntimeImpl {
         return;
       }
 
-      const pluginRuntime = getMaxRuntime() as any;
-      const channelRuntime = pluginRuntime?.channel;
+      // channelRuntime is PluginRuntime["channel"] provided by the gateway via ctx.channelRuntime
+      const channelRuntime = this.channelRuntime ?? (getMaxRuntime() as any)?.channel;
 
-      const {
-        buildInboundReplyDispatchBase,
-        dispatchInboundReplyWithBase,
-        recordInboundSessionAndDispatchReply,
-      } = await import("openclaw/plugin-sdk") as any;
-
-      const dispatcher = {
-        deliver: async (payload: any) => {
-          if (payload?.text) await this.sendMessage(userId, payload.text);
-        },
-        markComplete: () => {},
-        waitForIdle: async () => {},
-        flush: async () => {},
-        abort: () => {},
-        reset: () => {},
-      };
-
-      // Resolve agent route — provides agentId, sessionKey, etc.
+      // Resolve agent route (provides sessionKey, agentId, accountId, etc.)
       let route: any;
       if (typeof channelRuntime?.routing?.resolveAgentRoute === "function") {
         route = await channelRuntime.routing.resolveAgentRoute({ ctx: inboundCtx, cfg: this.cfg });
       }
 
-      // Use pluginRuntime (has .channel) + route (has .agentId) together
-      if (typeof buildInboundReplyDispatchBase === "function" && typeof dispatchInboundReplyWithBase === "function") {
-        try {
-          const base = await buildInboundReplyDispatchBase({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, route });
-          await dispatchInboundReplyWithBase({ base, dispatcher });
-          return;
-        } catch (err) {
-          console.error(`[MAX] buildInboundReplyDispatchBase failed:`, err);
-        }
+      // Build FinalizedMsgContext (uppercase keys as per OpenClaw internal format)
+      const ctxPayload = {
+        Body: text,
+        BodyForAgent: text,
+        RawBody: text,
+        CommandBody: text,
+        BodyForCommands: text,
+        From: `max:${userId}`,
+        To: `max:${userId}`,
+        SessionKey: route?.sessionKey,
+        AccountId: route?.accountId ?? this.account.accountId,
+        ChatType: "direct",
+        ConversationLabel: displayName,
+        SenderName: displayName,
+        SenderId: userId.toString(),
+        Provider: "max",
+        Surface: "max",
+        MessageSid: message.body?.mid || undefined,
+        Timestamp: message.timestamp || Date.now(),
+        CommandAuthorized: false,
+        OriginatingChannel: "max",
+        OriginatingTo: `max:${userId}`,
+      };
+
+      if (typeof channelRuntime?.reply?.dispatchReplyWithBufferedBlockDispatcher === "function") {
+        await channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
+          ctx: ctxPayload,
+          cfg: this.cfg,
+          dispatcherOptions: {
+            deliver: async (payload: any) => {
+              const replyText = payload?.text ?? payload?.body ?? "";
+              if (replyText) await this.sendMessage(userId, replyText);
+            },
+            onError: (err: Error, info: any) => {
+              console.error(`[MAX] reply dispatch error (${info?.kind ?? "unknown"}):`, err);
+            },
+          },
+        });
+        return;
       }
 
-      if (typeof recordInboundSessionAndDispatchReply === "function") {
-        try {
-          await recordInboundSessionAndDispatchReply({ ctx: inboundCtx, cfg: this.cfg, runtime: pluginRuntime, dispatcher, route });
-          return;
-        } catch (err) {
-          console.error(`[MAX] recordInboundSessionAndDispatchReply failed:`, err);
-        }
-      }
-
-      console.warn(`[MAX] No dispatch mechanism available — message lost: "${text}"`);
+      console.warn(`[MAX] channelRuntime.reply not available — message lost: "${text}"`);
     } catch (error) {
       console.error(`[MAX] handleUpdate error:`, error);
     }

@@ -223,9 +223,12 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
 
       const { MaxRuntimeImpl } = await import("./runtime.js");
 
+      const ctxAny = ctx as any;
+
       const runtimeImpl = new MaxRuntimeImpl({
         account,
         cfg: ctx.cfg,
+        channelRuntime: ctxAny.channelRuntime,
         onError: (err: Error) => {
           console.error(`[MAX] [${account.accountId}] runtime error:`, err);
         },
