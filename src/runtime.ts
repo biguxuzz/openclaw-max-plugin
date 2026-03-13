@@ -261,62 +261,32 @@ class MaxRuntimeImpl {
       }
 
       if (typeof channelRuntime?.reply?.dispatchReplyWithBufferedBlockDispatcher === "function") {
-        const { createTypingCallbacks } = await import("openclaw/plugin-sdk") as any;
-
-        const deliver = async (payload: any) => {
-          const replyText = payload?.text ?? payload?.body ?? "";
-          if (replyText) await this.sendMessage(userId, replyText);
+        // Send "typing_on" every 5s while AI is processing (MAX typing indicator auto-expires)
+        let typingTimer: ReturnType<typeof setInterval> | null = null;
+        const startTyping = async () => {
+          try { await this.client.sendAction(userId, "typing_on"); } catch { /* non-fatal */ }
         };
 
-        const onError = (err: Error, info: any) => {
-          console.error(`[MAX] reply dispatch error (${info?.kind ?? "unknown"}):`, err);
-        };
+        try {
+          await startTyping();
+          typingTimer = setInterval(startTyping, 5000);
 
-        // Typing indicator: send "typing_on" while AI is processing
-        let dispatcherOptions: any = { deliver, onError };
-
-        if (typeof createTypingCallbacks === "function") {
-          const typingCallbacks = createTypingCallbacks({
-            start: async () => {
-              try {
-                await this.client.sendAction(userId, "typing_on");
-              } catch {
-                // non-fatal
-              }
+          await channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
+            ctx: ctxPayload,
+            cfg: this.cfg,
+            dispatcherOptions: {
+              deliver: async (payload: any) => {
+                const replyText = payload?.text ?? payload?.body ?? "";
+                if (replyText) await this.sendMessage(userId, replyText);
+              },
+              onError: (err: Error, info: any) => {
+                console.error(`[MAX] reply dispatch error (${info?.kind ?? "unknown"}):`, err);
+              },
             },
-            onStartError: () => {},
           });
-
-          const { createReplyDispatcherWithTyping } = channelRuntime.reply;
-          if (typeof createReplyDispatcherWithTyping === "function") {
-            const humanDelay = typeof channelRuntime.reply.resolveHumanDelayConfig === "function"
-              ? channelRuntime.reply.resolveHumanDelayConfig(this.cfg, route?.agentId ?? "main")
-              : undefined;
-
-            const { dispatcher, replyOptions, markDispatchIdle } = createReplyDispatcherWithTyping({
-              humanDelay,
-              typingCallbacks,
-              deliver,
-              onError,
-            });
-
-            await channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
-              ctx: ctxPayload,
-              cfg: this.cfg,
-              dispatcherOptions: dispatcher,
-              replyOptions,
-            });
-            markDispatchIdle();
-            return;
-          }
+        } finally {
+          if (typingTimer) clearInterval(typingTimer);
         }
-
-        // Fallback without typing
-        await channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
-          ctx: ctxPayload,
-          cfg: this.cfg,
-          dispatcherOptions,
-        });
         return;
       }
 
