@@ -196,18 +196,24 @@ class MaxRuntimeImpl {
         return;
       }
 
-      // channelRuntime is PluginRuntime["channel"] provided by the gateway via ctx.channelRuntime
+      // channelRuntime is PluginRuntime["channel"] — provided via ctx.channelRuntime in startAccount
       const channelRuntime = this.channelRuntime ?? (getMaxRuntime() as any)?.channel;
 
-      // Resolve agent route (provides sessionKey, agentId, accountId, etc.)
+      // Resolve agent route (sessionKey, agentId, accountId, etc.)
       let route: any;
       if (typeof channelRuntime?.routing?.resolveAgentRoute === "function") {
         route = await channelRuntime.routing.resolveAgentRoute({ ctx: inboundCtx, cfg: this.cfg });
       }
 
-      // Build FinalizedMsgContext (uppercase keys as per OpenClaw internal format)
+      // resolveStorePath is available directly on channelRuntime.session
+      const storePath: string = typeof channelRuntime?.session?.resolveStorePath === "function"
+        ? (channelRuntime.session.resolveStorePath((this.cfg as any)?.session?.store, { agentId: route?.agentId ?? "main" }) ?? "")
+        : "";
+
       const maxTo = `max:${userId}`;
-      const ctxPayload = {
+
+      // Build FinalizedMsgContext — use finalizeInboundContext from channelRuntime.reply if available
+      const rawCtxFields = {
         Body: text,
         BodyForAgent: text,
         RawBody: text,
@@ -225,51 +231,33 @@ class MaxRuntimeImpl {
         Surface: "max",
         MessageSid: message.body?.mid || undefined,
         Timestamp: message.timestamp || Date.now(),
-        CommandAuthorized: false,
-        // Force reply routing back via MAX, not via session's lastChannel (e.g. telegram)
+        CommandAuthorized: false as const,
+        // Force reply routing back via MAX instead of session lastChannel
         OriginatingChannel: "max",
         OriginatingTo: maxTo,
         ExplicitDeliverRoute: true,
       };
 
-      // Update session last route so AI knows to use MAX for future replies.
-      // recordInboundSession requires storePath which comes from resolveStorePath —
-      // not exported from plugin-sdk, so we import it via the resolved package path.
-      if (typeof channelRuntime?.session?.recordInboundSession === "function" && route) {
-        try {
-          let storePath = "";
-          try {
-            const mainUrl = import.meta.resolve("openclaw");
-            const sessionsUrl = mainUrl.replace(/\/dist\/[^/]+$/, "/dist/config/sessions.js");
-            const { resolveStorePath } = await import(sessionsUrl) as any;
-            if (typeof resolveStorePath === "function") {
-              storePath = resolveStorePath((this.cfg as any)?.session?.store, { agentId: route.agentId }) ?? "";
-            }
-          } catch {
-            // fallback: try common config paths
-            const cfgAny = this.cfg as any;
-            storePath = cfgAny?.session?.store?.path ?? cfgAny?.session?.storePath ?? "";
-          }
+      const ctxPayload = typeof channelRuntime?.reply?.finalizeInboundContext === "function"
+        ? channelRuntime.reply.finalizeInboundContext(rawCtxFields)
+        : rawCtxFields;
 
-          if (storePath) {
-            await channelRuntime.session.recordInboundSession({
-              storePath,
-              sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
-              ctx: ctxPayload,
-              updateLastRoute: {
-                sessionKey: route.mainSessionKey ?? route.sessionKey,
-                channel: "max",
-                to: maxTo,
-                accountId: this.account.accountId,
-              },
-              onRecordError: (err: unknown) => {
-                console.error("[MAX] recordInboundSession error:", err);
-              },
-            });
-          }
-        } catch (err) {
-          console.error("[MAX] recordInboundSession failed:", err);
-        }
+      // Record inbound session — updates lastChannel to "max" so AI tools route correctly
+      if (storePath && typeof channelRuntime?.session?.recordInboundSession === "function" && route) {
+        await channelRuntime.session.recordInboundSession({
+          storePath,
+          sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+          ctx: ctxPayload,
+          updateLastRoute: {
+            sessionKey: route.mainSessionKey ?? route.sessionKey,
+            channel: "max",
+            to: maxTo,
+            accountId: this.account.accountId,
+          },
+          onRecordError: (err: unknown) => {
+            console.error("[MAX] recordInboundSession error:", err);
+          },
+        });
       }
 
       if (typeof channelRuntime?.reply?.dispatchReplyWithBufferedBlockDispatcher === "function") {
