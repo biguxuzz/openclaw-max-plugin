@@ -232,22 +232,41 @@ class MaxRuntimeImpl {
         ExplicitDeliverRoute: true,
       };
 
-      // Update session last route so AI knows to use MAX for future replies
+      // Update session last route so AI knows to use MAX for future replies.
+      // recordInboundSession requires storePath which comes from resolveStorePath —
+      // not exported from plugin-sdk, so we import it via the resolved package path.
       if (typeof channelRuntime?.session?.recordInboundSession === "function" && route) {
         try {
-          await channelRuntime.session.recordInboundSession({
-            sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
-            ctx: ctxPayload,
-            updateLastRoute: {
-              sessionKey: route.mainSessionKey ?? route.sessionKey,
-              channel: "max",
-              to: maxTo,
-              accountId: this.account.accountId,
-            },
-            onRecordError: (err: unknown) => {
-              console.error("[MAX] recordInboundSession error:", err);
-            },
-          });
+          let storePath = "";
+          try {
+            const mainUrl = import.meta.resolve("openclaw");
+            const sessionsUrl = mainUrl.replace(/\/dist\/[^/]+$/, "/dist/config/sessions.js");
+            const { resolveStorePath } = await import(sessionsUrl) as any;
+            if (typeof resolveStorePath === "function") {
+              storePath = resolveStorePath((this.cfg as any)?.session?.store, { agentId: route.agentId }) ?? "";
+            }
+          } catch {
+            // fallback: try common config paths
+            const cfgAny = this.cfg as any;
+            storePath = cfgAny?.session?.store?.path ?? cfgAny?.session?.storePath ?? "";
+          }
+
+          if (storePath) {
+            await channelRuntime.session.recordInboundSession({
+              storePath,
+              sessionKey: ctxPayload.SessionKey ?? route.sessionKey,
+              ctx: ctxPayload,
+              updateLastRoute: {
+                sessionKey: route.mainSessionKey ?? route.sessionKey,
+                channel: "max",
+                to: maxTo,
+                accountId: this.account.accountId,
+              },
+              onRecordError: (err: unknown) => {
+                console.error("[MAX] recordInboundSession error:", err);
+              },
+            });
+          }
         } catch (err) {
           console.error("[MAX] recordInboundSession failed:", err);
         }
