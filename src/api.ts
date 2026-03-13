@@ -97,6 +97,14 @@ export class MaxApiClient {
   }
 
   /**
+   * Send bot action (typing_on, sending_photo, mark_seen, etc.)
+   * POST /chats/{chatId}/actions
+   */
+  async sendAction(chatId: number, action: "typing_on" | "sending_photo" | "sending_video" | "sending_audio" | "sending_file" | "mark_seen"): Promise<{ success: boolean }> {
+    return this.request("POST", `/chats/${chatId}/actions`, undefined, { action });
+  }
+
+  /**
    * Get updates (Long Polling)
    */
   async getUpdates(params: MaxGetUpdatesParams = {}): Promise<{
