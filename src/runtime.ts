@@ -164,6 +164,29 @@ class MaxRuntimeImpl {
     }
   }
 
+  /** Download a MAX attachment URL and save it to disk via channelRuntime.media */
+  private async downloadAttachment(
+    url: string,
+    contentType: string,
+    channelRuntime: any
+  ): Promise<{ path: string; contentType: string } | null> {
+    try {
+      const resp = await fetch(url, { headers: { Authorization: this.account.token ?? "" } });
+      if (!resp.ok) return null;
+      const arrayBuffer = await resp.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const ct = resp.headers.get("content-type") ?? contentType;
+
+      if (typeof channelRuntime?.media?.saveMediaBuffer === "function") {
+        const saved = await channelRuntime.media.saveMediaBuffer(buffer, ct, "inbound", 50 * 1024 * 1024);
+        return { path: saved.path, contentType: saved.contentType ?? ct };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   private async handleUpdate(update: MaxUpdate): Promise<void> {
     try {
       if (update.update_type !== "message_created" || !update.message) return;
@@ -171,22 +194,31 @@ class MaxRuntimeImpl {
       const message = update.message;
       if (message.sender?.is_bot) return;
 
-      const text = message.body?.text;
-      if (!text) return;
+      const text = message.body?.text ?? "";
+      const attachments = message.body?.attachments ?? [];
+
+      // Skip if no text and no media attachments
+      const hasMedia = attachments.some(a =>
+        a.type === "image" || a.type === "video" || a.type === "audio" || a.type === "file"
+      );
+      if (!text && !hasMedia) return;
 
       const firstName = message.sender?.first_name || "";
       const lastName = message.sender?.last_name || "";
       const displayName = [firstName, lastName].filter(Boolean).join(" ") || "Unknown";
       const userId = message.sender?.user_id || 0;
 
-      console.log(`[MAX] message from ${displayName} (${userId}): "${text}"`);
+      const attachmentSummary = hasMedia
+        ? ` + ${attachments.filter(a => ["image","video","audio","file"].includes(a.type)).length} attachment(s)`
+        : "";
+      console.log(`[MAX] message from ${displayName} (${userId}): "${text}"${attachmentSummary}`);
 
       const inboundCtx = {
         channel: "max",
         accountId: this.account.accountId,
         peer: { kind: "direct", id: userId.toString() },
         sender: { id: userId.toString(), name: displayName },
-        text,
+        text: text || "[attachment]",
         timestamp: message.timestamp || Date.now(),
         messageId: message.body?.mid || "unknown",
       };
@@ -198,6 +230,25 @@ class MaxRuntimeImpl {
 
       // channelRuntime is PluginRuntime["channel"] — provided via ctx.channelRuntime in startAccount
       const channelRuntime = this.channelRuntime ?? (getMaxRuntime() as any)?.channel;
+
+      // Download media attachments and save locally
+      const savedMedia: Array<{ path: string; contentType: string }> = [];
+      if (hasMedia) {
+        for (const att of attachments) {
+          const payloadUrl = (att as any).payload?.url;
+          if (!payloadUrl) continue;
+
+          let defaultCt = "application/octet-stream";
+          if (att.type === "image")  defaultCt = "image/jpeg";
+          else if (att.type === "video") defaultCt = "video/mp4";
+          else if (att.type === "audio") defaultCt = "audio/mpeg";
+          else if (att.type === "file")  defaultCt = "application/octet-stream";
+
+          const saved = await this.downloadAttachment(payloadUrl, defaultCt, channelRuntime);
+          if (saved) savedMedia.push(saved);
+          else console.warn(`[MAX] Failed to save attachment (${att.type}) from ${payloadUrl}`);
+        }
+      }
 
       // Resolve agent route (sessionKey, agentId, accountId, etc.)
       let route: any;
@@ -212,13 +263,15 @@ class MaxRuntimeImpl {
 
       const maxTo = `max:${userId}`;
 
+      const bodyText = text || (savedMedia.length > 0 ? "[media]" : "[message]");
+
       // Build FinalizedMsgContext — use finalizeInboundContext from channelRuntime.reply if available
-      const rawCtxFields = {
-        Body: text,
-        BodyForAgent: text,
-        RawBody: text,
-        CommandBody: text,
-        BodyForCommands: text,
+      const rawCtxFields: Record<string, any> = {
+        Body: bodyText,
+        BodyForAgent: bodyText,
+        RawBody: bodyText,
+        CommandBody: bodyText,
+        BodyForCommands: bodyText,
         From: maxTo,
         To: maxTo,
         SessionKey: route?.sessionKey,
@@ -236,6 +289,13 @@ class MaxRuntimeImpl {
         OriginatingChannel: "max",
         OriginatingTo: maxTo,
         ExplicitDeliverRoute: true,
+        // Media attachments
+        ...(savedMedia.length > 0 && {
+          MediaPath: savedMedia[0].path,
+          MediaType: savedMedia[0].contentType,
+          MediaPaths: savedMedia.map(m => m.path),
+          MediaTypes: savedMedia.map(m => m.contentType),
+        }),
       };
 
       const ctxPayload = typeof channelRuntime?.reply?.finalizeInboundContext === "function"

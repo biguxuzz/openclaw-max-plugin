@@ -38,6 +38,20 @@ export interface MaxProbe {
   lastChecked: number;
 }
 
+// Attachment types received in incoming messages
+export type MaxMediaPayload = { url: string; token: string };
+
+export type MaxAttachment =
+  | { type: "image";  payload: MaxMediaPayload & { photo_id: number } }
+  | { type: "video";  payload: MaxMediaPayload; filename?: string; width?: number; height?: number; duration?: number }
+  | { type: "audio";  payload: MaxMediaPayload; filename?: string }
+  | { type: "file";   payload: MaxMediaPayload; filename: string; size: number }
+  | { type: "sticker"; payload: { url: string; code: string }; width: number; height: number }
+  | { type: "share";  payload: Partial<MaxMediaPayload>; title?: string; description?: string; image_url?: string }
+  | { type: "location"; latitude: number; longitude: number }
+  | { type: "contact"; payload: { vcf_info?: string } }
+  | { type: "inline_keyboard"; payload: { buttons: any[][] } };
+
 export interface MaxMessage {
   sender?: {
     user_id: number;
@@ -53,7 +67,8 @@ export interface MaxMessage {
   };
   body: {
     mid: string;
-    text?: string;
+    text?: string | null;
+    attachments?: MaxAttachment[] | null;
   };
   timestamp: number;
 }
