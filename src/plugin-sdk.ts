@@ -106,6 +106,22 @@ export interface ChannelMessagingAdapter {
     looksLikeId: (id: string) => boolean;
     hint: string;
   };
+  sendText?: (params: {
+    cfg: any;
+    to: string;
+    text: string;
+    accountId?: string | null;
+    silent?: boolean;
+  }) => Promise<{ channel: string; messageId?: any }>;
+  sendMedia?: (params: {
+    cfg: any;
+    to: string;
+    text?: string;
+    mediaUrl?: string;
+    mediaLocalRoots?: string[];
+    accountId?: string | null;
+    silent?: boolean;
+  }) => Promise<{ channel: string; messageId?: any }>;
 }
 
 export interface ChannelDirectoryAdapter {

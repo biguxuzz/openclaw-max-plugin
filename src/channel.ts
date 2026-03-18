@@ -174,6 +174,37 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
       looksLikeId: (id: string) => /^\d+$/.test(id),
       hint: "<user_id>",
     },
+    sendText: async ({ cfg, to, text, accountId, silent }) => {
+      const account = resolveMaxAccount(cfg, accountId);
+      const client = getMaxClient(account);
+      if (!client) {
+        throw new Error("MAX client not available");
+      }
+      await client.sendMessage({
+        user_id: Number(to),
+        text,
+        notify: silent === false ? true : undefined,
+      });
+      return { channel: "max", messageId: Date.now() };
+    },
+    sendMedia: async ({ cfg, to, text, mediaUrl, accountId, silent }) => {
+      const account = resolveMaxAccount(cfg, accountId);
+      const client = getMaxClient(account);
+      if (!client) {
+        throw new Error("MAX client not available");
+      }
+      const attachments: any[] = [];
+      if (mediaUrl) {
+        attachments.push({ type: "image", url: mediaUrl });
+      }
+      await client.sendMessage({
+        user_id: Number(to),
+        text: text || "",
+        attachments: attachments.length > 0 ? attachments : undefined,
+        notify: silent === false ? true : undefined,
+      });
+      return { channel: "max", messageId: Date.now() };
+    },
   },
 
   directory: {
