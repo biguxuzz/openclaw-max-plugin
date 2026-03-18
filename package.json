@@ -1,12 +1,41 @@
 {
   "name": "@openclaw/max",
   "version": "1.0.0",
-  "private": true,
-  "description": "OpenClaw MAX messenger channel plugin",
+  "description": "MAX Messenger channel plugin for OpenClaw Gateway",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "author": "biguxuzz (Pavel) <pavel@biguxuzz.dev>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/biguxuzz/openclaw-max-plugin.git"
+  },
+  "keywords": [
+    "openclaw",
+    "openclaw-plugin",
+    "max",
+    "max-messenger",
+    "messenger",
+    "gateway",
+    "bot",
+    "chat"
+  ],
+  "files": [
+    "dist/",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "prepublishOnly": "npm run build"
+  },
   "openclaw": {
     "extensions": [
       "./index.ts"
     ]
+  },
+  "engines": {
+    "node": ">=22.0.0"
   }
 }
