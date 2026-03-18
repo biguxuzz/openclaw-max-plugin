@@ -1,5 +1,5 @@
-import { createPluginRuntimeStore } from "openclaw/plugin-sdk/compat";
-import type { PluginRuntime } from "openclaw/plugin-sdk";
+import { createPluginRuntimeStore } from "./plugin-sdk.js";
+import type { PluginRuntime } from "./plugin-sdk.js";
 
 /**
  * MAX Messenger Runtime - Message Handler and Long Polling

@@ -50,6 +50,7 @@ export interface ChannelPlugin<ResolvedAccount = any, Probe = any> {
   directory?: ChannelDirectoryAdapter;
   setup?: ChannelSetupAdapter;
   outbound?: ChannelOutboundAdapter;
+  gateway?: any;
   startRuntime?: (params: {
     account: ResolvedAccount;
     onMessage: (ctx: any) => Promise<void>;
@@ -168,3 +169,40 @@ export interface ChannelSetupAdapter {
 
 export const OpenClawConfig: any = {};
 export type TSchema = any;
+
+// ============================================
+// OpenClaw Extension API stubs
+// (real implementations are provided at runtime by OpenClaw Gateway)
+// ============================================
+
+export type PluginRuntime = any;
+
+export interface OpenClawPluginApi {
+  runtime: PluginRuntime;
+  registerChannel: (opts: { plugin: ChannelPlugin }) => void;
+}
+
+export interface OpenClawExtension {
+  id: string;
+  name: string;
+  configSchema?: any;
+  register: (api: OpenClawPluginApi) => void;
+}
+
+export function emptyPluginConfigSchema(): any {
+  return {};
+}
+
+export function createPluginRuntimeStore<T>(errorMsg: string): {
+  setRuntime: (r: T) => void;
+  getRuntime: () => T;
+} {
+  let _runtime: T | undefined;
+  return {
+    setRuntime: (r: T) => { _runtime = r; },
+    getRuntime: () => {
+      if (_runtime === undefined) throw new Error(errorMsg);
+      return _runtime as T;
+    },
+  };
+}

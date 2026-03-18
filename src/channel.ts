@@ -253,7 +253,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
    * Gateway runtime integration
    */
   gateway: {
-    startAccount: async (ctx) => {
+    startAccount: async (ctx: any) => {
       const { account, abortSignal } = ctx;
 
       console.log(`[MAX] [${account.accountId}] starting`);
@@ -283,7 +283,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
       await runtimeImpl.done;
     },
 
-    logoutAccount: async ({ accountId, cfg }) => {
+    logoutAccount: async ({ accountId, cfg }: any) => {
       return cfg;
     },
   },

@@ -2,8 +2,6 @@
  * MAX Messenger API Client
  */
 
-// Use global fetch in Node 22+
-const fetch = globalThis.fetch;
 import type {
   MaxApiClientConfig,
   MaxSendMessageParams,
@@ -123,22 +121,21 @@ export class MaxApiClient {
   }
 
   /**
-   * Upload file
+   * Upload file using native FormData (Node 22+)
    */
   async uploadFile(filePath: string, type: string = "image"): Promise<any> {
-    const fs = await import("fs");
-    const FormData = (await import("form-data")).default;
+    const { readFile } = await import("fs/promises");
+    const { basename } = await import("path");
 
+    const buffer = await readFile(filePath);
+    const blob = new Blob([buffer]);
     const form = new FormData();
-    form.append("file", fs.createReadStream(filePath));
+    form.append("file", blob, basename(filePath));
     form.append("type", type);
 
     const response = await fetch(`${this.baseUrl}/uploads`, {
       method: "POST",
-      headers: {
-        Authorization: this.token,
-        ...form.getHeaders(),
-      },
+      headers: { Authorization: this.token },
       body: form,
     });
 

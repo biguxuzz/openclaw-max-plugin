@@ -38,7 +38,6 @@ export async function monitorMaxProvider(
   // Create runtime
   const runtimeImpl = new MaxRuntimeImpl({
     account,
-    runtime,
     onMessage,
     onError,
   });

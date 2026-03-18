@@ -42,13 +42,14 @@ export function createMaxWebhookHandler(config: MaxWebhookConfig) {
         return;
       }
 
-      console.log(`[MAX] Processing webhook message from ${message.sender?.name}: "${text}"`);
+      const senderName = [message.sender?.first_name, message.sender?.last_name].filter(Boolean).join(" ") || "Unknown";
+      console.log(`[MAX] Processing webhook message from ${senderName}: "${text}"`);
 
       // Create message context
       const ctx: MaxMessageContext = {
         messageId: message.body?.mid || "unknown",
         userId: message.sender?.user_id || 0,
-        userName: message.sender?.name || "Unknown",
+        userName: senderName,
         text: text,
         timestamp: message.timestamp || Date.now(),
         accountId: account.accountId,
