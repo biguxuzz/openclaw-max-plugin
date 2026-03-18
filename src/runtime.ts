@@ -187,12 +187,35 @@ class MaxRuntimeImpl {
     }
   }
 
+  /** Returns true if this user is permitted to interact with the bot. */
+  private isUserAllowed(userId: number): boolean {
+    const { dmPolicy = "pairing", allowFrom = [] } = this.account.config;
+
+    if (dmPolicy === "open") return true;
+    if (dmPolicy === "closed") return false;
+
+    // "pairing" (default) — only explicitly listed user IDs
+    const id = userId.toString();
+    return allowFrom.some(entry => entry.toString().replace(/^max:/i, "") === id);
+  }
+
   private async handleUpdate(update: MaxUpdate): Promise<void> {
     try {
       if (update.update_type !== "message_created" || !update.message) return;
 
       const message = update.message;
       if (message.sender?.is_bot) return;
+
+      const firstName = message.sender?.first_name || "";
+      const lastName = message.sender?.last_name || "";
+      const displayName = [firstName, lastName].filter(Boolean).join(" ") || "Unknown";
+      const userId = message.sender?.user_id || 0;
+
+      // Security: enforce dmPolicy / allowFrom before any processing
+      if (!this.isUserAllowed(userId)) {
+        console.warn(`[MAX] [security] message from ${displayName} (${userId}) blocked — not in allowFrom (policy: ${this.account.config.dmPolicy ?? "pairing"})`);
+        return;
+      }
 
       const text = message.body?.text ?? "";
       const attachments = message.body?.attachments ?? [];
@@ -202,11 +225,6 @@ class MaxRuntimeImpl {
         a.type === "image" || a.type === "video" || a.type === "audio" || a.type === "file"
       );
       if (!text && !hasMedia) return;
-
-      const firstName = message.sender?.first_name || "";
-      const lastName = message.sender?.last_name || "";
-      const displayName = [firstName, lastName].filter(Boolean).join(" ") || "Unknown";
-      const userId = message.sender?.user_id || 0;
 
       const attachmentSummary = hasMedia
         ? ` + ${attachments.filter(a => ["image","video","audio","file"].includes(a.type)).length} attachment(s)`
