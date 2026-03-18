@@ -217,6 +217,7 @@ class MaxRuntimeImpl {
         return;
       }
 
+      const chatId = message.recipient?.chat_id ?? userId;
       const text = message.body?.text ?? "";
       const attachments = message.body?.attachments ?? [];
 
@@ -342,7 +343,7 @@ class MaxRuntimeImpl {
         // Send "typing_on" every 5s while AI is processing (MAX typing indicator auto-expires)
         let typingTimer: ReturnType<typeof setInterval> | null = null;
         const startTyping = async () => {
-          try { await this.client.sendAction(userId, "typing_on"); } catch { /* non-fatal */ }
+          try { await this.client.sendAction(chatId, "typing_on"); } catch { /* non-fatal */ }
         };
 
         try {
