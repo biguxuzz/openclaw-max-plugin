@@ -9,6 +9,35 @@
 // Core Types
 // ============================================
 
+export interface ChannelOutboundAdapter {
+  deliveryMode: "direct" | "queue";
+  chunker: null | any;
+  textChunkLimit?: number;
+  resolveTarget?: (params: { to: string }) => string;
+  sendText: (params: {
+    cfg: any;
+    to: string;
+    text: string;
+    accountId?: string | null;
+    deps?: Record<string, unknown>;
+    replyToId?: string | number | null;
+    threadId?: string | number | null;
+    silent?: boolean | null;
+  }) => Promise<unknown>;
+  sendMedia?: (params: {
+    cfg: any;
+    to: string;
+    text?: string | null;
+    mediaUrl?: string | null;
+    mediaLocalRoots?: string[];
+    accountId?: string | null;
+    deps?: Record<string, unknown>;
+    replyToId?: string | number | null;
+    threadId?: string | number | null;
+    silent?: boolean | null;
+  }) => Promise<unknown>;
+}
+
 export interface ChannelPlugin<ResolvedAccount = any, Probe = any> {
   id: string;
   meta: ChannelMeta;
@@ -20,6 +49,7 @@ export interface ChannelPlugin<ResolvedAccount = any, Probe = any> {
   messaging?: ChannelMessagingAdapter;
   directory?: ChannelDirectoryAdapter;
   setup?: ChannelSetupAdapter;
+  outbound?: ChannelOutboundAdapter;
   startRuntime?: (params: {
     account: ResolvedAccount;
     onMessage: (ctx: any) => Promise<void>;

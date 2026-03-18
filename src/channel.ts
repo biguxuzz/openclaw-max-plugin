@@ -212,6 +212,43 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
     },
   },
 
+  outbound: {
+    deliveryMode: "direct" as const,
+    chunker: null,
+    textChunkLimit: 4096,
+
+    sendText: async ({ cfg, to, text, accountId }: {
+      cfg: any;
+      to: string;
+      text: string;
+      accountId?: string | null;
+    }) => {
+      const account = resolveMaxAccount(cfg, accountId);
+      const client = getMaxClient(account);
+      if (!client) throw new Error("MAX client not available — token not configured");
+      const userId = Number(to.replace(/^max:/i, ""));
+      if (isNaN(userId)) throw new Error(`Invalid MAX user_id: ${to}`);
+      const result = await client.sendMessage({ user_id: userId, text });
+      return { channel: "max", messageId: result?.mid ?? Date.now() };
+    },
+
+    sendMedia: async ({ cfg, to, text, accountId }: {
+      cfg: any;
+      to: string;
+      text?: string | null;
+      mediaUrl?: string | null;
+      accountId?: string | null;
+    }) => {
+      const account = resolveMaxAccount(cfg, accountId);
+      const client = getMaxClient(account);
+      if (!client) throw new Error("MAX client not available — token not configured");
+      const userId = Number(to.replace(/^max:/i, ""));
+      if (isNaN(userId)) throw new Error(`Invalid MAX user_id: ${to}`);
+      const result = await client.sendMessage({ user_id: userId, text: text ?? "" });
+      return { channel: "max", messageId: result?.mid ?? Date.now() };
+    },
+  },
+
   /**
    * Gateway runtime integration
    */
