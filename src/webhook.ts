@@ -16,6 +16,17 @@ export function createMaxWebhookHandler(config: MaxWebhookConfig) {
   return async (req: any, res: any) => {
     console.log(`[MAX] Webhook received:`, req.body?.update_type);
 
+    // Validate webhook secret when configured
+    const secret = account.webhookSecret;
+    if (secret) {
+      const incoming = req.headers?.["x-max-bot-api-secret"];
+      if (incoming !== secret) {
+        console.warn(`[MAX] Webhook secret mismatch — request rejected`);
+        res.status(401).json({ error: "Invalid secret" });
+        return;
+      }
+    }
+
     try {
       const update = req.body as MaxUpdate;
 

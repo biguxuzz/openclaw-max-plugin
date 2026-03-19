@@ -21,6 +21,9 @@ export interface ResolvedMaxAccount {
   enabled: boolean;
   configured: boolean;
   token?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  webhookPath?: string;
   config: {
     dmPolicy?: string;
     allowFrom?: string[];
@@ -117,7 +120,10 @@ export interface MaxConfigSchema {
   tokenFile?: string;
   name?: string;
   enabled?: boolean;
-  dmPolicy?: "open" | "pairing" | "closed";
+  dmPolicy?: "open" | "pairing" | "closed" | "allowlist" | "disabled";
   allowFrom?: string[];
   defaultTo?: string;
+  webhookUrl?: string;
+  webhookSecret?: string;
+  webhookPath?: string;
 }

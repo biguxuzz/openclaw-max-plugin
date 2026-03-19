@@ -1,10 +1,16 @@
 {
   "name": "@biguxuzz/max",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MAX Messenger channel plugin for OpenClaw Gateway",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "author": "biguxuzz (Pavel) <pavel@biguxuzz.dev>",
   "license": "MIT",
   "repository": {
@@ -33,7 +39,20 @@
   "openclaw": {
     "extensions": [
       "./index.ts"
-    ]
+    ],
+    "channel": {
+      "id": "max",
+      "label": "MAX Messenger",
+      "selectionLabel": "MAX",
+      "docsPath": "/channels/max-messenger",
+      "blurb": "Connect OpenClaw to MAX messenger via Bot API. Supports DMs, file attachments, and typing indicators.",
+      "order": 80
+    },
+    "install": {
+      "npmSpec": "@biguxuzz/max",
+      "localPath": "extensions/max-messenger",
+      "defaultChoice": "npm"
+    }
   },
   "engines": {
     "node": ">=22.0.0"

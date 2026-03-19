@@ -1,29 +1,45 @@
 # OpenClaw MAX Messenger Plugin
 
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-Plugin-blue)](https://github.com/openclaw/openclaw)
+[![npm](https://img.shields.io/npm/v/@biguxuzz/max)](https://www.npmjs.com/package/@biguxuzz/max)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A complete MAX Messenger channel plugin for OpenClaw Gateway, enabling seamless integration with MAX Messenger bots through polling and webhook support.
+A MAX Messenger channel plugin for OpenClaw Gateway — long polling and webhook support, file attachments, typing indicators, and flexible access control.
 
 ## Features
 
-- ✅ **Message Reception** - Long polling to receive messages from MAX API
+- ✅ **Message Reception** - Long polling or webhook to receive messages from MAX API
 - ✅ **Message Sending** - Send text messages to users (outbound)
 - ✅ **Cron / Notification Delivery** - Receive cron job reminders and system notifications in MAX
 - ✅ **File Handling** - Receive and process file attachments (docx, pdf, images, etc.)
-- ✅ **Image Support** - Handle image messages
-- ✅ **Typing Indicators** - Show typing status to users
-- ✅ **Access Control** - `dmPolicy` (open/pairing/closed) + `allowFrom` allow-list
+- ✅ **Image Support** - Handle image messages with sendMedia outbound
+- ✅ **Typing Indicators** - Show typing status, refreshed every 5 s while AI processes
+- ✅ **Webhook Secret Validation** - `X-Max-Bot-Api-Secret` header check
+- ✅ **Access Control** - `dmPolicy` (`open` / `pairing` / `allowlist` / `closed` / `disabled`) + `allowFrom`
 
 ## Prerequisites
 
 - **OpenClaw Gateway** v2026.3.8 or higher
 - **Node.js** v22 or higher
-- **MAX Bot Token** — from the MAX developer portal
+- **MAX Bot Token** — obtained from the MAX developer portal (see below)
+
+## How to create a MAX bot
+
+1. Go to [business.max.ru](https://business.max.ru) and log in with your MAX account.
+2. Open **Bots** → **Create bot**.
+3. Fill in the name and description, submit for moderation (usually approved within minutes).
+4. Once approved, copy your **Bot API token** from the bot settings page.
 
 ## Installation
 
-### Manual (recommended)
+### Via openclaw plugins (recommended)
+
+```bash
+openclaw plugins install @biguxuzz/max
+openclaw gateway restart
+```
+
+### Manual
 
 ```bash
 cd ~/.nvm/versions/node/v24.14.0/lib/node_modules/openclaw/extensions/max-messenger
@@ -35,25 +51,37 @@ openclaw gateway restart
 
 ```bash
 git clone https://github.com/biguxuzz/openclaw-max-plugin.git
-npm install
-cp -r openclaw-max-plugin ~/.nvm/versions/node/v24.14.0/lib/node_modules/openclaw/extensions/max-messenger
+cd openclaw-max-plugin
+npm install && npm run build
+cp -r . ~/.nvm/versions/node/v24.14.0/lib/node_modules/openclaw/extensions/max-messenger
 openclaw gateway restart
 ```
 
 ## Configuration
 
-Add MAX configuration to your OpenClaw `openclaw.json`:
+### Minimal (flat config, long polling)
 
 ```json
 {
   "channels": {
     "max": {
-      "enabled": true,
+      "token": "YOUR_MAX_BOT_TOKEN",
       "dmPolicy": "pairing",
+      "allowFrom": ["3411927"]
+    }
+  }
+}
+```
+
+### With accounts (multi-account)
+
+```json
+{
+  "channels": {
+    "max": {
       "accounts": {
         "default": {
           "token": "YOUR_MAX_BOT_TOKEN",
-          "enabled": true,
           "dmPolicy": "pairing",
           "allowFrom": ["3411927"]
         }
@@ -63,32 +91,67 @@ Add MAX configuration to your OpenClaw `openclaw.json`:
 }
 ```
 
-### Configuration Options
+### With webhook (production)
+
+```json
+{
+  "channels": {
+    "max": {
+      "token": "YOUR_MAX_BOT_TOKEN",
+      "webhookUrl": "https://your-domain.com/max/webhook",
+      "webhookSecret": "random_secret_string",
+      "webhookPath": "/max/webhook",
+      "dmPolicy": "pairing",
+      "allowFrom": ["3411927"]
+    }
+  }
+}
+```
+
+MAX will send events to `webhookUrl`; incoming requests are validated against `webhookSecret` via the `X-Max-Bot-Api-Secret` header.
+
+### Via environment variable
+
+If you prefer not to store the token in `openclaw.json`:
+
+```bash
+MAX_BOT_TOKEN=your_token openclaw gateway start
+```
+
+The plugin checks `MAX_BOT_TOKEN` first, then `MAX_API_TOKEN`, then the `token` field in config.
+
+## Configuration Options
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
+| `token` | string | — | MAX Bot API token |
 | `enabled` | boolean | `true` | Enable/disable the MAX channel |
-| `token` | string | required | Your MAX bot token |
-| `baseUrl` | string | `https://platform-api.max.ru` | MAX API base URL (optional) |
-| `dmPolicy` | string | `pairing` | DM policy: `open`, `pairing`, or `closed` |
-| `allowFrom` | string[] | `[]` | List of allowed user IDs |
+| `dmPolicy` | string | `pairing` | DM access policy (see below) |
+| `allowFrom` | string[] | `[]` | Allowed MAX user IDs |
+| `webhookUrl` | string | — | Public webhook URL (if omitted, uses long polling) |
+| `webhookSecret` | string | — | Secret for `X-Max-Bot-Api-Secret` header validation |
+| `webhookPath` | string | `/max/webhook` | Local HTTP path for webhook registration |
 
 ### Direct Message Policies
 
-- **`open`** — Accept all direct messages
-- **`pairing`** — Require pairing before accepting DMs (default)
-- **`closed`** — Reject all direct messages
+| Policy | Behaviour |
+|--------|-----------|
+| `open` | Accept messages from anyone |
+| `pairing` | Accept only from users in `allowFrom` (default) |
+| `allowlist` | Alias for `pairing` — clearer intent |
+| `closed` | Reject all direct messages |
+| `disabled` | Completely disable inbound message processing |
 
 ## Usage
 
-After configuration and gateway restart, the plugin automatically:
+After configuration and gateway restart, the plugin:
 
-- Starts polling for new messages from MAX API
+- Starts long polling **or** registers a webhook with MAX
 - Delivers inbound messages (text, files, images) to your AI assistant
-- Sends outbound messages back to users in MAX
-- Delivers cron job notifications and reminders to MAX
-- Enforces `dmPolicy` and `allowFrom` access control
-- Shows typing indicators while processing
+- Sends outbound messages back to users
+- Delivers cron job notifications and reminders
+- Enforces `dmPolicy` / `allowFrom` access control
+- Shows typing indicator while processing (refreshed every 5 s)
 
 ### Sending messages via cron
 
@@ -104,71 +167,34 @@ openclaw cron add --name "standup" --cron "0 9 * * *" \
 
 ### Receiving files
 
-When a user sends a file in MAX, the plugin downloads it and makes it available to the AI assistant. Supported formats: docx, pdf, images, txt, and others.
+When a user sends a file in MAX the plugin downloads it and makes it available to the AI assistant. Supported: docx, pdf, images, txt, and other common formats.
 
 ## Architecture
 
 ```
 max-messenger/
 ├── src/
-│   ├── api.ts          # MAX API client (sendMessage, getUpdates, sendAction, etc.)
+│   ├── api.ts          # MAX API client (sendMessage, getUpdates, sendAction)
 │   ├── channel.ts      # Gateway channel plugin + outbound adapter
 │   ├── provider.ts     # Provider monitor
 │   ├── runtime.ts      # Long polling loop, message handling, file download
 │   ├── types.ts        # TypeScript types
-│   └── webhook.ts      # Webhook handler (alternative to polling)
+│   └── webhook.ts      # Webhook handler with secret validation
 ├── index.ts            # Plugin entry point
 ├── openclaw.plugin.json  # Plugin manifest
 ├── package.json
 └── tsconfig.json
 ```
 
-## MAX API Reference
-
-### Sending a text message
-
-```typescript
-await client.sendMessage({
-  user_id: 123456,
-  text: 'Hello from OpenClaw!'
-});
-```
-
-### Getting updates (Long Polling)
-
-```typescript
-const { updates, marker } = await client.getUpdates({
-  limit: 100,
-  timeout: 30,
-  marker: lastMarker
-});
-```
-
-### Typing indicator
-
-```typescript
-await client.sendAction({
-  chatId: 'user123',
-  action: 'typing_on'
-});
-```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/my-feature`
-3. Commit your changes: `git commit -am 'Add my feature'`
-4. Push to the branch: `git push origin feature/my-feature`
-5. Submit a Pull Request
-
 ## Resources
 
 - [MAX API Documentation](https://dev.max.ru)
+- [MAX Bot Developer Portal](https://business.max.ru)
 - [OpenClaw Documentation](https://docs.openclaw.ai)
 - [OpenClaw GitHub](https://github.com/openclaw/openclaw)
-- [GitHub Repository](https://github.com/biguxuzz/openclaw-max-plugin)
-- [Community Discord](https://discord.com/invite/clawd)
+- [Plugin Repository](https://github.com/biguxuzz/openclaw-max-plugin)
+- [npm Package](https://www.npmjs.com/package/@biguxuzz/max)
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) for details.
+MIT License — see [LICENSE](LICENSE) for details.

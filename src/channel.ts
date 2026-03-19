@@ -35,12 +35,17 @@ function resolveMaxAccount(
   const accounts = cfg.channels?.max?.accounts || {};
   const account = accounts[id] || cfg.channels?.max || {};
 
+  const token = account.token || process.env.MAX_BOT_TOKEN || process.env.MAX_API_TOKEN;
+
   return {
     accountId: id,
     name: account.name,
     enabled: account.enabled !== false,
-    configured: Boolean(account.token || process.env.MAX_API_TOKEN),
-    token: account.token || process.env.MAX_API_TOKEN,
+    configured: Boolean(token),
+    token,
+    webhookUrl: account.webhookUrl,
+    webhookSecret: account.webhookSecret,
+    webhookPath: account.webhookPath,
     config: {
       dmPolicy: account.dmPolicy || "pairing",
       allowFrom: account.allowFrom || [],

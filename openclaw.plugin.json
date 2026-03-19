@@ -2,8 +2,8 @@
   "id": "max",
   "channels": ["max"],
   "label": "MAX Messenger",
-  "version": "1.0.0",
-  "description": "MAX messenger channel plugin",
+  "version": "1.1.0",
+  "description": "MAX messenger channel plugin for OpenClaw Gateway",
   "configSchema": {
     "type": "object",
     "properties": {
@@ -12,18 +12,31 @@
         "default": true
       },
       "token": {
-        "type": "string"
+        "type": "string",
+        "description": "MAX Bot API token (from business.max.ru)"
       },
       "dmPolicy": {
         "type": "string",
-        "enum": ["open", "pairing", "closed"],
-        "default": "pairing"
+        "enum": ["open", "pairing", "closed", "allowlist", "disabled"],
+        "default": "pairing",
+        "description": "Who can send DMs: open=all, pairing/allowlist=allowFrom list only, closed/disabled=nobody"
       },
       "allowFrom": {
         "type": "array",
-        "items": {
-          "type": "string"
-        }
+        "items": { "type": "string" },
+        "description": "Allowed MAX user IDs (when dmPolicy is pairing or allowlist)"
+      },
+      "webhookUrl": {
+        "type": "string",
+        "description": "Public HTTPS URL where MAX will POST events (optional, uses long polling if not set)"
+      },
+      "webhookSecret": {
+        "type": "string",
+        "description": "Secret to validate X-Max-Bot-Api-Secret header from MAX"
+      },
+      "webhookPath": {
+        "type": "string",
+        "description": "Local HTTP path to register for the webhook (default: /max/webhook)"
       }
     }
   }

@@ -191,10 +191,10 @@ class MaxRuntimeImpl {
   private isUserAllowed(userId: number): boolean {
     const { dmPolicy = "pairing", allowFrom = [] } = this.account.config;
 
+    if (dmPolicy === "disabled" || dmPolicy === "closed") return false;
     if (dmPolicy === "open") return true;
-    if (dmPolicy === "closed") return false;
 
-    // "pairing" (default) — only explicitly listed user IDs
+    // "pairing" and "allowlist" — only explicitly listed user IDs
     const id = userId.toString();
     return allowFrom.some(entry => entry.toString().replace(/^max:/i, "") === id);
   }
