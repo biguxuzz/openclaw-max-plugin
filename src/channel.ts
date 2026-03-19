@@ -5,6 +5,7 @@
 import type { ChannelPlugin } from "./plugin-sdk.js";
 import type { ResolvedMaxAccount, MaxProbe } from "./types.js";
 import { MaxApiClient } from "./api.js";
+import { resolveAccount, listAccountIds, DEFAULT_ACCOUNT_ID } from "./accounts.js";
 
 // ============================================
 // Meta
@@ -20,45 +21,6 @@ const meta = {
   aliases: ["max", "maxbot", "max-messenger"],
   quickstartAllowFrom: true,
 };
-
-// ============================================
-// Account Resolution
-// ============================================
-
-const DEFAULT_ACCOUNT_ID = "default";
-
-function resolveMaxAccount(
-  cfg: any,
-  accountId?: string | null
-): ResolvedMaxAccount {
-  const id = accountId || DEFAULT_ACCOUNT_ID;
-  const accounts = cfg.channels?.max?.accounts || {};
-  const account = accounts[id] || cfg.channels?.max || {};
-
-  const token = account.token || process.env.MAX_BOT_TOKEN || process.env.MAX_API_TOKEN;
-
-  return {
-    accountId: id,
-    name: account.name,
-    enabled: account.enabled !== false,
-    configured: Boolean(token),
-    token,
-    webhookUrl: account.webhookUrl,
-    webhookSecret: account.webhookSecret,
-    webhookPath: account.webhookPath,
-    config: {
-      dmPolicy: account.dmPolicy || "pairing",
-      allowFrom: account.allowFrom || [],
-      defaultTo: account.defaultTo,
-    },
-  };
-}
-
-function listMaxAccountIds(cfg: any): string[] {
-  const accounts = cfg.channels?.max?.accounts || {};
-  const ids = Object.keys(accounts);
-  return ids.length > 0 ? ids : [DEFAULT_ACCOUNT_ID];
-}
 
 // ============================================
 // MAX Client Helper
@@ -98,9 +60,9 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
   },
 
   config: {
-    listAccountIds: listMaxAccountIds,
+    listAccountIds,
 
-    resolveAccount: resolveMaxAccount,
+    resolveAccount,
 
     defaultAccountId: () => DEFAULT_ACCOUNT_ID,
 
@@ -149,7 +111,7 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
     idLabel: "maxUserId",
     normalizeAllowEntry: (entry) => entry.replace(/^(max|maxbot):/i, ""),
     notifyApproval: async ({ cfg, id }) => {
-      const account = resolveMaxAccount(cfg);
+      const account = resolveAccount(cfg);
       const client = getMaxClient(account);
 
       if (!client) {
@@ -165,8 +127,8 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
 
   security: {
     resolveDmPolicy: ({ account }) => ({
-      policy: account.config.dmPolicy || "pairing",
-      allowFrom: account.config.allowFrom || [],
+      policy: account.dmPolicy || "pairing",
+      allowFrom: account.allowFrom || [],
       policyPath: `channels.max.accounts.${account.accountId}.dmPolicy`,
       allowFromPath: `channels.max.accounts.${account.accountId}`,
       approveHint: "Run: openclaw channels max allow <user_id>",
@@ -218,9 +180,9 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
   },
 
   outbound: {
-    deliveryMode: "direct" as const,
+    deliveryMode: "gateway" as const,
     chunker: null,
-    textChunkLimit: 4096,
+    textChunkLimit: 4000,
 
     sendText: async ({ cfg, to, text, accountId }: {
       cfg: any;
@@ -228,29 +190,35 @@ export const maxPlugin: ChannelPlugin<ResolvedMaxAccount, MaxProbe> = {
       text: string;
       accountId?: string | null;
     }) => {
-      const account = resolveMaxAccount(cfg, accountId);
+      const account = resolveAccount(cfg, accountId);
       const client = getMaxClient(account);
       if (!client) throw new Error("MAX client not available — token not configured");
       const userId = Number(to.replace(/^max:/i, ""));
       if (isNaN(userId)) throw new Error(`Invalid MAX user_id: ${to}`);
       const result = await client.sendMessage({ user_id: userId, text });
-      return { channel: "max", messageId: result?.mid ?? Date.now() };
+      return { channel: "max", messageId: result?.mid ?? `max-${Date.now()}`, chatId: to };
     },
 
-    sendMedia: async ({ cfg, to, text, accountId }: {
+    sendMedia: async ({ cfg, to, text, mediaUrl, accountId }: {
       cfg: any;
       to: string;
       text?: string | null;
       mediaUrl?: string | null;
       accountId?: string | null;
     }) => {
-      const account = resolveMaxAccount(cfg, accountId);
+      const account = resolveAccount(cfg, accountId);
       const client = getMaxClient(account);
       if (!client) throw new Error("MAX client not available — token not configured");
       const userId = Number(to.replace(/^max:/i, ""));
       if (isNaN(userId)) throw new Error(`Invalid MAX user_id: ${to}`);
-      const result = await client.sendMessage({ user_id: userId, text: text ?? "" });
-      return { channel: "max", messageId: result?.mid ?? Date.now() };
+      const attachments: any[] = [];
+      if (mediaUrl) attachments.push({ type: "image", url: mediaUrl });
+      const result = await client.sendMessage({
+        user_id: userId,
+        text: text ?? "",
+        attachments: attachments.length > 0 ? attachments : undefined,
+      });
+      return { channel: "max", messageId: result?.mid ?? `max-${Date.now()}`, chatId: to };
     },
   },
 

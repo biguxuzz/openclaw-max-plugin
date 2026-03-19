@@ -10,7 +10,7 @@
 // ============================================
 
 export interface ChannelOutboundAdapter {
-  deliveryMode: "direct" | "queue";
+  deliveryMode: "direct" | "queue" | "gateway";
   chunker: null | any;
   textChunkLimit?: number;
   resolveTarget?: (params: { to: string }) => string;

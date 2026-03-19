@@ -29,3 +29,6 @@ npm-debug.log*
 
 # Test
 coverage/
+
+# Task files (internal, not for repo)
+TASK_*.md

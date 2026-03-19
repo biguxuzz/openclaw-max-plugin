@@ -189,7 +189,8 @@ class MaxRuntimeImpl {
 
   /** Returns true if this user is permitted to interact with the bot. */
   private isUserAllowed(userId: number): boolean {
-    const { dmPolicy = "pairing", allowFrom = [] } = this.account.config;
+    const dmPolicy = this.account.dmPolicy ?? "pairing";
+    const allowFrom = this.account.allowFrom ?? [];
 
     if (dmPolicy === "disabled" || dmPolicy === "closed") return false;
     if (dmPolicy === "open") return true;
@@ -213,7 +214,7 @@ class MaxRuntimeImpl {
 
       // Security: enforce dmPolicy / allowFrom before any processing
       if (!this.isUserAllowed(userId)) {
-        console.warn(`[MAX] [security] message from ${displayName} (${userId}) blocked — not in allowFrom (policy: ${this.account.config.dmPolicy ?? "pairing"})`);
+        console.warn(`[MAX] [security] message from ${displayName} (${userId}) blocked — not in allowFrom (policy: ${this.account.dmPolicy ?? "pairing"})`);
         return;
       }
 

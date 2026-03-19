@@ -20,15 +20,12 @@ export interface ResolvedMaxAccount {
   name?: string;
   enabled: boolean;
   configured: boolean;
-  token?: string;
+  token: string;
+  dmPolicy: string;
+  allowFrom: string[];
   webhookUrl?: string;
   webhookSecret?: string;
-  webhookPath?: string;
-  config: {
-    dmPolicy?: string;
-    allowFrom?: string[];
-    defaultTo?: string;
-  };
+  webhookPath: string;
 }
 
 export interface MaxProbe {

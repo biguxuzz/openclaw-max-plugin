@@ -2,24 +2,25 @@
   "id": "max",
   "channels": ["max"],
   "label": "MAX Messenger",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "MAX messenger channel plugin for OpenClaw Gateway",
   "configSchema": {
     "type": "object",
     "properties": {
-      "enabled": {
-        "type": "boolean",
-        "default": true
-      },
+      "enabled": { "type": "boolean", "default": true },
       "token": {
         "type": "string",
         "description": "MAX Bot API token (from business.max.ru)"
+      },
+      "baseUrl": {
+        "type": "string",
+        "description": "Override MAX API base URL (default: https://platform-api.max.ru)"
       },
       "dmPolicy": {
         "type": "string",
         "enum": ["open", "pairing", "closed", "allowlist", "disabled"],
         "default": "pairing",
-        "description": "Who can send DMs: open=all, pairing/allowlist=allowFrom list only, closed/disabled=nobody"
+        "description": "Who can send DMs: open=all, pairing/allowlist=allowFrom only, closed/disabled=nobody"
       },
       "allowFrom": {
         "type": "array",
@@ -28,7 +29,7 @@
       },
       "webhookUrl": {
         "type": "string",
-        "description": "Public HTTPS URL where MAX will POST events (optional, uses long polling if not set)"
+        "description": "Public HTTPS URL where MAX will POST events (uses long polling if not set)"
       },
       "webhookSecret": {
         "type": "string",
@@ -36,7 +37,24 @@
       },
       "webhookPath": {
         "type": "string",
-        "description": "Local HTTP path to register for the webhook (default: /max/webhook)"
+        "default": "/max/webhook",
+        "description": "Local HTTP path to register for the webhook"
+      },
+      "accounts": {
+        "type": "object",
+        "description": "Per-account overrides (keys are account IDs)",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "token": { "type": "string" },
+            "enabled": { "type": "boolean" },
+            "dmPolicy": { "type": "string" },
+            "allowFrom": { "type": "array", "items": { "type": "string" } },
+            "webhookUrl": { "type": "string" },
+            "webhookSecret": { "type": "string" },
+            "webhookPath": { "type": "string" }
+          }
+        }
       }
     }
   }
