@@ -1,6 +1,6 @@
 {
   "name": "@biguxuzz/max",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "MAX Messenger channel plugin for OpenClaw Gateway",
   "type": "module",
   "main": "./dist/index.js",

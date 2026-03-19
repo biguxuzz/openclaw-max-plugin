@@ -121,8 +121,8 @@ function createStreamingDeliver(
       if (!creationPromise) {
         creationPromise = (async () => {
           const result = await client.sendMessage({ user_id: userId, text: accumulated + " …" });
-          // MAX sendMessage returns { message_id } or { body: { mid } }
-          messageId = result?.message_id ?? result?.body?.mid ?? String(Date.now());
+          // MAX sendMessage returns { message: { body: { mid: "mid.xxx" } } }
+          messageId = result?.message?.body?.mid ?? result?.message_id ?? result?.body?.mid ?? String(Date.now());
           lastEditAt = Date.now();
         })();
       }
