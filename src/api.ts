@@ -103,6 +103,21 @@ export class MaxApiClient {
   }
 
   /**
+   * Edit an existing message (streaming updates).
+   * PUT /messages?message_id={id}
+   * Returns false on error (non-fatal — message may have been deleted).
+   */
+  async editMessage(messageId: string, text: string): Promise<boolean> {
+    try {
+      await this.request("PUT", "/messages", { message_id: messageId }, { text, format: "markdown" });
+      return true;
+    } catch (err) {
+      console.warn(`[MAX] editMessage error:`, err);
+      return false;
+    }
+  }
+
+  /**
    * Get updates (Long Polling)
    */
   async getUpdates(params: MaxGetUpdatesParams = {}): Promise<{

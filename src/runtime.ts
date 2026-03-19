@@ -46,6 +46,111 @@ async function getMaxClient(token: string) {
 }
 
 // ============================================
+// Streaming Deliver
+// ============================================
+
+const STREAM_EDIT_INTERVAL_MS = 800;
+const TYPING_REFRESH_INTERVAL_MS = 4000;
+
+/**
+ * Creates two callbacks for streaming AI responses to a MAX chat:
+ *   onPartialToken(text) — called with cumulative text for each streamed chunk
+ *   deliver(payload)     — called once with the final text
+ *
+ * Mechanics:
+ * - First chunk → sends a new message with text + " …" cursor
+ * - Subsequent chunks → edits that message, throttled to ≤1 edit/800ms
+ * - MAX auto-clears typing on edit → we re-send typing_on after each edit
+ * - Final deliver → edits to clean final text (no cursor), stops typing
+ *
+ * @param client   - MaxApiClient instance
+ * @param userId   - recipient user_id for sendMessage
+ * @param chatId   - chat_id for sendAction (typing indicator)
+ */
+function createStreamingDeliver(
+  client: any,
+  userId: number,
+  chatId: number,
+): {
+  onPartialToken: (text: string) => Promise<void>;
+  deliver: (payload: { text?: string; body?: string }) => Promise<void>;
+} {
+  let messageId: string | null = null;
+  let accumulated = "";
+  let lastEditAt = 0;
+  let pendingEdit: ReturnType<typeof setTimeout> | null = null;
+  let creationPromise: Promise<void> | null = null;
+
+  // Typing indicator — fires immediately and every TYPING_REFRESH_INTERVAL_MS
+  const typingInterval = setInterval(() => {
+    client.sendAction(chatId, "typing_on").catch(() => {});
+  }, TYPING_REFRESH_INTERVAL_MS);
+  client.sendAction(chatId, "typing_on").catch(() => {});
+
+  function stopTyping() {
+    clearInterval(typingInterval);
+  }
+
+  async function throttledEdit(text: string) {
+    if (!messageId) return;
+    const elapsed = Date.now() - lastEditAt;
+    if (pendingEdit) { clearTimeout(pendingEdit); pendingEdit = null; }
+
+    if (elapsed >= STREAM_EDIT_INTERVAL_MS) {
+      await client.editMessage(messageId, text);
+      lastEditAt = Date.now();
+      // MAX clears typing indicator on each edit — restore it
+      client.sendAction(chatId, "typing_on").catch(() => {});
+    } else {
+      pendingEdit = setTimeout(async () => {
+        pendingEdit = null;
+        if (messageId) {
+          await client.editMessage(messageId, text).catch(() => {});
+          lastEditAt = Date.now();
+          client.sendAction(chatId, "typing_on").catch(() => {});
+        }
+      }, STREAM_EDIT_INTERVAL_MS - elapsed);
+    }
+  }
+
+  async function onPartialToken(text: string): Promise<void> {
+    if (!text) return;
+    accumulated = text; // cumulative — SET, not +=
+
+    if (!messageId) {
+      if (!creationPromise) {
+        creationPromise = (async () => {
+          const result = await client.sendMessage({ user_id: userId, text: accumulated + " …" });
+          // MAX sendMessage returns { message_id } or { body: { mid } }
+          messageId = result?.message_id ?? result?.body?.mid ?? String(Date.now());
+          lastEditAt = Date.now();
+        })();
+      }
+      await creationPromise;
+      return;
+    }
+
+    await throttledEdit(accumulated + " …");
+  }
+
+  async function deliver(payload: { text?: string; body?: string }): Promise<void> {
+    stopTyping();
+    if (pendingEdit) { clearTimeout(pendingEdit); pendingEdit = null; }
+
+    const finalText = payload?.text ?? payload?.body ?? accumulated;
+    if (!finalText) return;
+
+    if (messageId) {
+      await client.editMessage(messageId, finalText);
+    } else {
+      await client.sendMessage({ user_id: userId, text: finalText });
+    }
+  }
+
+  return { onPartialToken, deliver };
+}
+
+// ============================================
 // Runtime Implementation
 // ============================================
 
@@ -341,31 +446,26 @@ class MaxRuntimeImpl {
       }
 
       if (typeof channelRuntime?.reply?.dispatchReplyWithBufferedBlockDispatcher === "function") {
-        // Send "typing_on" every 5s while AI is processing (MAX typing indicator auto-expires)
-        let typingTimer: ReturnType<typeof setInterval> | null = null;
-        const startTyping = async () => {
-          try { await this.client.sendAction(chatId, "typing_on"); } catch { /* non-fatal */ }
-        };
+        const { onPartialToken, deliver } = createStreamingDeliver(this.client, userId, chatId);
 
         try {
-          await startTyping();
-          typingTimer = setInterval(startTyping, 5000);
-
           await channelRuntime.reply.dispatchReplyWithBufferedBlockDispatcher({
             ctx: ctxPayload,
             cfg: this.cfg,
-            dispatcherOptions: {
-              deliver: async (payload: any) => {
-                const replyText = payload?.text ?? payload?.body ?? "";
-                if (replyText) await this.sendMessage(userId, replyText);
+            replyOptions: {
+              onPartialReply: async (payload: { text?: string }) => {
+                if (payload?.text) await onPartialToken(payload.text);
               },
+            },
+            dispatcherOptions: {
+              deliver,
               onError: (err: Error, info: any) => {
                 console.error(`[MAX] reply dispatch error (${info?.kind ?? "unknown"}):`, err);
               },
             },
           });
-        } finally {
-          if (typingTimer) clearInterval(typingTimer);
+        } catch (err) {
+          console.error(`[MAX] dispatchReply error:`, err);
         }
         return;
       }
