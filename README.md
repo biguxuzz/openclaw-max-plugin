@@ -39,21 +39,13 @@ openclaw plugins install @biguxuzz/max
 openclaw gateway restart
 ```
 
-### Manual
-
-```bash
-cd ~/.nvm/versions/node/v24.14.0/lib/node_modules/openclaw/extensions/max-messenger
-git pull origin main
-openclaw gateway restart
-```
-
-### From source
+### Manual (from source)
 
 ```bash
 git clone https://github.com/biguxuzz/openclaw-max-plugin.git
 cd openclaw-max-plugin
 npm install && npm run build
-cp -r . ~/.nvm/versions/node/v24.14.0/lib/node_modules/openclaw/extensions/max-messenger
+openclaw plugins install ./dist
 openclaw gateway restart
 ```
 
